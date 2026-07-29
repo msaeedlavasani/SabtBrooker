@@ -108,8 +108,8 @@ func main() {
 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
 
 	// ── Services ────────────────────────────────────────────────
+	_ = notification.NewService(db.Pool, rdb) // suppress unused for now
 
-	notificationSvc := notification.NewService(db.Pool, rdb)
 
 	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
 	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)
