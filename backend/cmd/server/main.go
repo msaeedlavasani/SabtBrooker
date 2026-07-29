@@ -23,6 +23,7 @@ import (
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/scheduler"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/storage"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
 )
 
@@ -46,6 +47,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+
+	store, err := storage.NewMinIOStorage(cfg.MinIO)
+	if err != nil {
+		slog.Error("failed to initialize storage", "error", err)
+		os.Exit(1)
+	}
 
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	if err := rdb.Ping(ctx).Err(); err != nil {
@@ -123,6 +130,7 @@ func main() {
 	mapHandler := handler.NewMapHandler(mapSvc)
 	claimHandler := handler.NewClaimHandler(claimSvc)
 	certHandler := handler.NewCertHandler(certSvc)
+	storageHandler := handler.NewStorageHandler(store)
 
 	// ── Background Services ─────────────────────────────────────
 
@@ -167,6 +175,7 @@ func main() {
 	mapHandler.RegisterRoutes(protected.Group("/map-services"))
 	claimHandler.RegisterRoutes(protected.Group("/claim-services"))
 	certHandler.RegisterRoutes(protected.Group("/cert-services"))
+	storageHandler.RegisterRoutes(protected.Group("/storage"))
 
 	// ── Graceful Shutdown ───────────────────────────────────────
 

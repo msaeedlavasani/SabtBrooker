@@ -16,6 +16,7 @@ import {
   ExternalLink
 } from "lucide-react";
 import Link from "next/link";
+import FileUpload from "@/components/ui/FileUpload";
 
 export default function CaseDetailPage() {
   const { id } = useParams();
@@ -25,6 +26,18 @@ export default function CaseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  
+  // Fieldwork data
+  const [fieldworkData, setFieldworkData] = useState({
+    map_file_id: "",
+    descriptive_table: {
+      owner_declared_area: 0,
+      neighbor_north: "",
+      neighbor_south: "",
+      neighbor_east: "",
+      neighbor_west: "",
+    }
+  });
 
   const fetchData = async () => {
     try {
@@ -53,6 +66,18 @@ export default function CaseDetailPage() {
       await fetchData();
     } catch (err: any) {
       alert(err.response?.data?.error || "خطا در شروع فرآیند نقشه");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleFieldworkSubmit = async () => {
+    setSubmitting(true);
+    try {
+      await api.post(`/v1/map-services/${id}/fieldwork/submit`, fieldworkData);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.response?.data?.error || "خطا در ثبت اطلاعات میدانی");
     } finally {
       setSubmitting(false);
     }
@@ -149,6 +174,55 @@ export default function CaseDetailPage() {
                     status={mapService?.status === "approved" ? "done" : "pending"} 
                   />
                 </div>
+
+                {mapService?.status === "fieldwork_in_progress" && (
+                  <div className="mt-8 pt-8 border-t border-line space-y-6">
+                    <h4 className="font-bold text-navy flex items-center gap-2">
+                      <FileUpload size={18} className="text-brass" />
+                      تکمیل اطلاعات نقشه و عملیات میدانی
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <FileUpload 
+                        label="فایل نقشه (DWG/PDF)" 
+                        accept=".dwg,.pdf"
+                        onUploadSuccess={(fileId) => setFieldworkData({...fieldworkData, map_file_id: fileId})}
+                      />
+                      
+                      <div className="space-y-4">
+                        <div className="field">
+                          <label className="text-[12px] font-bold text-ink-soft">مساحت اظهاری (متر مربع)</label>
+                          <input 
+                            type="number" 
+                            className="mt-1 block w-full rounded-lg border border-line bg-gray-50 p-2 text-sm focus:border-navy focus:bg-white"
+                            onChange={(e) => setFieldworkData({
+                              ...fieldworkData, 
+                              descriptive_table: {...fieldworkData.descriptive_table, owner_declared_area: Number(e.target.value)}
+                            })}
+                          />
+                        </div>
+                        <div className="field">
+                          <label className="text-[12px] font-bold text-ink-soft">حد شمال</label>
+                          <input 
+                            className="mt-1 block w-full rounded-lg border border-line bg-gray-50 p-2 text-sm focus:border-navy focus:bg-white"
+                            onChange={(e) => setFieldworkData({
+                              ...fieldworkData, 
+                              descriptive_table: {...fieldworkData.descriptive_table, neighbor_north: e.target.value}
+                            })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={handleFieldworkSubmit}
+                      disabled={submitting || !fieldworkData.map_file_id}
+                      className="w-full rounded-xl bg-navy p-4 font-bold text-white shadow-md disabled:opacity-50"
+                    >
+                      {submitting ? <Loader2 className="animate-spin" /> : "ثبت اطلاعات و تایید نهایی نقشه"}
+                    </button>
+                  </div>
+                )}
               </section>
             )}
           </div>
