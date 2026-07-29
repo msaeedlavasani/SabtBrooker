@@ -5,8 +5,9 @@
 ## 🚀 وضعیت پروژه (Current Status)
 
 - **Backend (Go):** ۱۰۰٪ کامل — شامل Auth, Case Management, Workflows, PostGIS, Zarinpal, SMS.
-- **Web Frontend (Next.js):** ۱۰۰٪ کامل — ویزاردهای هوشمند منطبق با آخرین قوانین ثبتی.
-- **Mobile App (Flutter):** در حال توسعه (۴۰٪) — قابلیت Geo-tagging و رابط کاربری بازدید میدانی فعال است.
+- **Web Frontend (Next.js):** ۱۰۰٪ کامل (PWA Enabled) — ویزاردهای هوشمند منطبق با آخرین قوانین ثبتی.
+- **Mobile App (Flutter):** در حال توسعه (۸۰٪) — قابلیت Geo-tagging، سینک آفلاین و رابط کاربری بازدید میدانی فعال است.
+- **Security:** در حال ممیزی — رفع حفره‌های IDOR در لایه API (تیر ۱۴۰۵).
 - **CI/CD:** عملیاتی — تمام تست‌ها و بیلدهای بک‌اِند و فرانت‌اِند سبز هستند.
 
 ## 🛠 پشته فنی (Full Stack)

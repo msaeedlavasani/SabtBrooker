@@ -78,9 +78,14 @@ func (h *CaseHandler) Get(c echo.Context) error {
 	if err != nil {
 		return BadRequest(c, "شناسه نامعتبر")
 	}
-	cse, err := h.svc.GetCase(c.Request().Context(), id)
+	cse, err := h.svc.GetCase(
+		c.Request().Context(),
+		id,
+		middleware.GetUserID(c),
+		middleware.GetUserRole(c),
+	)
 	if err != nil {
-		return NotFound(c, "پرونده یافت نشد")
+		return NotFound(c, err.Error())
 	}
 	return OK(c, cse)
 }
@@ -115,7 +120,14 @@ func (h *CaseHandler) Update(c echo.Context) error {
 		return BadRequest(c, "حداقل یک فیلد باید مقداردهی شود")
 	}
 
-	if err := h.svc.UpdateCase(c.Request().Context(), id, fields); err != nil {
+	err = h.svc.UpdateCase(
+		c.Request().Context(),
+		id,
+		middleware.GetUserID(c),
+		middleware.GetUserRole(c),
+		fields,
+	)
+	if err != nil {
 		return InternalError(c, err.Error())
 	}
 	return OK(c, map[string]string{"message": "پرونده به‌روزرسانی شد"})
@@ -130,7 +142,14 @@ func (h *CaseHandler) UpdateCapacity(c echo.Context) error {
 	if err := c.Bind(&req); err != nil {
 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
 	}
-	if err := h.svc.UpdateCapacity(c.Request().Context(), id, req.Capacity); err != nil {
+	err = h.svc.UpdateCapacity(
+		c.Request().Context(),
+		id,
+		middleware.GetUserID(c),
+		middleware.GetUserRole(c),
+		req.Capacity,
+	)
+	if err != nil {
 		return Unprocessable(c, err.Error(), nil)
 	}
 	return OK(c, map[string]string{"message": "سمت متقاضی به‌روزرسانی شد"})
@@ -141,7 +160,12 @@ func (h *CaseHandler) SubmitForMap(c echo.Context) error {
 	if err != nil {
 		return BadRequest(c, "شناسه نامعتبر")
 	}
-	ms, err := h.svc.SubmitForMap(c.Request().Context(), id)
+	ms, err := h.svc.SubmitForMap(
+		c.Request().Context(),
+		id,
+		middleware.GetUserID(c),
+		middleware.GetUserRole(c),
+	)
 	if err != nil {
 		return Unprocessable(c, err.Error(), nil)
 	}

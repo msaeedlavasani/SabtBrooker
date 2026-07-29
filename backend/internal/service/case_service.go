@@ -92,32 +92,65 @@ func (s *CaseService) CreateCase(ctx context.Context, userIDStr string, role str
 	return created, nil
 }
 
-// GetCase returns a case by ID
-func (s *CaseService) GetCase(ctx context.Context, id uuid.UUID) (*repository.Case, error) {
-	return s.caseRepo.GetByID(ctx, id)
+// GetCase returns a case by ID with access control
+func (s *CaseService) GetCase(ctx context.Context, id uuid.UUID, userIDStr string, role string) (*repository.Case, error) {
+	c, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.checkAccess(c, userIDStr, role); err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
-// UpdateCase updates case fields
-func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
+// UpdateCase updates case fields with access control
+func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, userIDStr string, role string, fields map[string]interface{}) error {
+	c, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.checkAccess(c, userIDStr, role); err != nil {
+		return err
+	}
+
 	return s.caseRepo.UpdateByID(ctx, id, fields)
 }
 
-// UpdateCapacity updates the applicant capacity
-func (s *CaseService) UpdateCapacity(ctx context.Context, id uuid.UUID, capacity string) error {
+// UpdateCapacity updates the applicant capacity with access control
+func (s *CaseService) UpdateCapacity(ctx context.Context, id uuid.UUID, userIDStr string, role string, capacity string) error {
 	valid := map[string]bool{"principal": true, "legal_rep_natural": true, "legal_rep_legal": true}
 	if !valid[capacity] {
 		return fmt.Errorf("سمت متقاضی نامعتبر است — مقادیر مجاز: اصیل، نماینده قانونی شخص حقیقی، نماینده قانونی شخص حقوقی")
 	}
+
+	c, err := s.caseRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if err := s.checkAccess(c, userIDStr, role); err != nil {
+		return err
+	}
+
 	return s.caseRepo.UpdateCapacity(ctx, id, capacity)
 }
 
 // SubmitForMap transitions case from draft to map_in_progress
-func (s *CaseService) SubmitForMap(ctx context.Context, caseID uuid.UUID) (*repository.MapService, error) {
+func (s *CaseService) SubmitForMap(ctx context.Context, caseID uuid.UUID, userIDStr string, role string) (*repository.MapService, error) {
 	// Check case exists and is in draft status
 	c, err := s.caseRepo.GetByID(ctx, caseID)
 	if err != nil {
 		return nil, fmt.Errorf("پرونده یافت نشد")
 	}
+
+	if err := s.checkAccess(c, userIDStr, role); err != nil {
+		return nil, err
+	}
+
 	if c.Status != "draft" {
 		return nil, fmt.Errorf("پرونده در وضعیت %s است — فقط پرونده‌های پیش‌نویس قابل شروع هستند", c.Status)
 	}
@@ -153,6 +186,25 @@ func (s *CaseService) SubmitForMap(ctx context.Context, caseID uuid.UUID) (*repo
 	})
 
 	return ms, nil
+}
+
+func (s *CaseService) checkAccess(c *repository.Case, userIDStr string, role string) error {
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return fmt.Errorf("شناسه کاربر نامعتبر است")
+	}
+
+	switch role {
+	case "admin", "auditor":
+		return nil
+	case "applicant":
+		if c.ApplicantID != userID {
+			return fmt.Errorf("دسترسی غیرمجاز: شما مالک این پرونده نیستید")
+		}
+		return nil
+	default:
+		return fmt.Errorf("نقش کاربری نامعتبر")
+	}
 }
 
 // CreateCaseInput represents the input for creating a case
