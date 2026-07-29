@@ -54,10 +54,9 @@ func (s *ClaimService) VerifyConsent(ctx context.Context, id uuid.UUID, ack bool
 	return s.claimRepo.VerifyConsent(ctx, id)
 }
 
-// UpdateDetails updates claim metadata
-func (s *ClaimService) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateClaimInput) error {
-	fields := buildClaimFields(input)
-	return s.claimRepo.UpdateDetails(ctx, id, fields)
+// UpdateDetails updates claim metadata and documents
+func (s *ClaimService) UpdateDetails(ctx context.Context, id uuid.UUID, input repository.UpdateClaimInput) error {
+	return s.claimRepo.UpdateDetails(ctx, id, input)
 }
 
 // AddDocument adds a supporting document to the claim
@@ -158,21 +157,6 @@ func (s *ClaimService) GenerateAIAdvice(ctx context.Context, id uuid.UUID) (map[
 	}, nil
 }
 
-// UpdateClaimInput for updating claim details
-type UpdateClaimInput struct {
-	ClaimType            *string
-	OwnershipType        *string
-	MainPlateNumber      *string
-	SubPlateNumber       *string
-	PlateSection         *string
-	TotalShare           *int
-	PartialShare         *int
-	HasGovernmentRights  *bool
-	TreasuryPaymentRef   *string
-	LegalAdviceRequested *bool
-	LegalAdviceMethod    *string
-}
-
 // Legal advice struct
 type legalAdvice struct {
 	Action     string
@@ -205,42 +189,4 @@ func generateLegalAdvice(claimType, ownershipType string) legalAdvice {
 			Confidence: 0.70,
 		}
 	}
-}
-
-func buildClaimFields(input UpdateClaimInput) map[string]interface{} {
-	fields := make(map[string]interface{})
-	if input.ClaimType != nil {
-		fields["claim_type"] = *input.ClaimType
-	}
-	if input.OwnershipType != nil {
-		fields["ownership_type"] = *input.OwnershipType
-	}
-	if input.MainPlateNumber != nil {
-		fields["main_plate_number"] = *input.MainPlateNumber
-	}
-	if input.SubPlateNumber != nil {
-		fields["sub_plate_number"] = *input.SubPlateNumber
-	}
-	if input.PlateSection != nil {
-		fields["plate_section"] = *input.PlateSection
-	}
-	if input.TotalShare != nil {
-		fields["total_share"] = *input.TotalShare
-	}
-	if input.PartialShare != nil {
-		fields["partial_share"] = *input.PartialShare
-	}
-	if input.HasGovernmentRights != nil {
-		fields["has_government_rights"] = *input.HasGovernmentRights
-	}
-	if input.TreasuryPaymentRef != nil {
-		fields["treasury_payment_ref"] = *input.TreasuryPaymentRef
-	}
-	if input.LegalAdviceRequested != nil {
-		fields["legal_advice_requested"] = *input.LegalAdviceRequested
-	}
-	if input.LegalAdviceMethod != nil {
-		fields["legal_advice_method"] = *input.LegalAdviceMethod
-	}
-	return fields
 }

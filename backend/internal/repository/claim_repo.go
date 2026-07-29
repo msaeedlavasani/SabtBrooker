@@ -106,45 +106,52 @@ func (r *PostgresClaimServiceRepo) VerifyConsent(ctx context.Context, id uuid.UU
 	return nil
 }
 
-func (r *PostgresClaimServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
-	if len(fields) == 0 {
-		return nil
-	}
-
-	setClauses := make([]string, 0, len(fields))
-	args := make([]interface{}, 0, len(fields)+1)
-	argIdx := 1
-
-	for field, value := range fields {
-		// handle enum types — نیاز به cast صریح
-		switch v := value.(type) {
-		case string:
-			switch field {
-			case "claim_type", "ownership_type":
-				setClauses = append(setClauses, fmt.Sprintf("%s = $%d::%s", field, argIdx, field))
-			default:
-				setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
-			}
-			args = append(args, v)
-		default:
-			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
-			args = append(args, v)
-		}
-		argIdx++
-	}
-	args = append(args, id)
-
-	query := fmt.Sprintf("UPDATE claim_services SET %s, updated_at = NOW() WHERE id = $%d",
-		joinClauses(setClauses), argIdx)
-
-	tag, err := r.db.Exec(ctx, query, args...)
+func (r *PostgresClaimServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateClaimInput) error {
+	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to update claim: %w", err)
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Update claim_services
+	tag, err := tx.Exec(ctx, `
+		UPDATE claim_services SET
+			claim_type = $2::claim_type,
+			ownership_type = $3::ownership_type,
+			main_plate_number = $4,
+			sub_plate_number = $5,
+			plate_section = $6,
+			total_share = $7,
+			partial_share = $8,
+			has_government_rights = $9,
+			treasury_payment_ref = $10,
+			legal_advice_requested = $11,
+			legal_advice_method = $12,
+			updated_at = NOW()
+		WHERE id = $1
+	`, id, input.ClaimType, input.OwnershipType, input.MainPlateNumber, input.SubPlateNumber,
+		input.PlateSection, input.TotalShare, input.PartialShare, input.HasGovernmentRights,
+		input.TreasuryPaymentRef, input.LegalAdviceRequested, input.LegalAdviceMethod)
+
+	if err != nil {
+		return fmt.Errorf("failed to update claim service: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("claim %s not found", id)
+		return fmt.Errorf("claim service %s not found", id)
 	}
-	return nil
+
+	// 2. Insert documents (if any)
+	for _, d := range input.Documents {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO claim_documents (claim_service_id, doc_type, file_path, description)
+			VALUES ($1, $2::document_type, $3, $4)
+		`, id, d.DocType, d.FilePath, d.Description)
+		if err != nil {
+			return fmt.Errorf("failed to insert claim document: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresClaimServiceRepo) AddDocument(ctx context.Context, claimID uuid.UUID, docType, fileID, description string) (*ClaimDocument, error) {

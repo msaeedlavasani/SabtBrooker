@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
 )
 
@@ -61,35 +62,13 @@ func (h *CertHandler) UpdateDetails(c echo.Context) error {
 	if err != nil {
 		return BadRequest(c, "شناسه نامعتبر")
 	}
-	var req struct {
-		ActionReference string `json:"action_reference"`
-		ActionType      string `json:"action_type"`
-		ActionDate      string `json:"action_date"`
-		CertImageID     string `json:"cert_image_id"`
-		CertUniqueID    string `json:"cert_unique_id"`
-	}
+
+	var req repository.UpdateCertInput
 	if err := c.Bind(&req); err != nil {
 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
 	}
 
-	input := service.UpdateCertInput{}
-	if req.ActionReference != "" {
-		input.ActionReference = &req.ActionReference
-	}
-	if req.ActionType != "" {
-		input.ActionType = &req.ActionType
-	}
-	if req.ActionDate != "" {
-		input.ActionDate = &req.ActionDate
-	}
-	if req.CertImageID != "" {
-		input.CertImageID = &req.CertImageID
-	}
-	if req.CertUniqueID != "" {
-		input.CertUniqueID = &req.CertUniqueID
-	}
-
-	if err := h.svc.UpdateDetails(c.Request().Context(), id, input); err != nil {
+	if err := h.svc.UpdateDetails(c.Request().Context(), id, req); err != nil {
 		return Unprocessable(c, err.Error(), nil)
 	}
 	return OK(c, map[string]string{"message": "اطلاعات گواهی به‌روزرسانی شد"})

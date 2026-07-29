@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
@@ -49,28 +48,8 @@ func (s *CertService) VerifyConsent(ctx context.Context, id uuid.UUID) error {
 }
 
 // UpdateDetails updates certificate metadata
-func (s *CertService) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateCertInput) error {
-	fields := make(map[string]interface{})
-	if input.ActionReference != nil {
-		fields["action_reference"] = *input.ActionReference
-	}
-	if input.ActionType != nil {
-		fields["action_type"] = *input.ActionType
-	}
-	if input.ActionDate != nil {
-		t, err := time.Parse("2006-01-02", *input.ActionDate)
-		if err != nil {
-			return fmt.Errorf("فرمت تاریخ نامعتبر است — باید YYYY-MM-DD باشد")
-		}
-		fields["action_date"] = t
-	}
-	if input.CertImageID != nil {
-		fields["cert_image_path"] = *input.CertImageID
-	}
-	if input.CertUniqueID != nil {
-		fields["cert_unique_id"] = *input.CertUniqueID
-	}
-	return s.certRepo.UpdateDetails(ctx, id, fields)
+func (s *CertService) UpdateDetails(ctx context.Context, id uuid.UUID, input repository.UpdateCertInput) error {
+	return s.certRepo.UpdateDetails(ctx, id, input)
 }
 
 // SubmitToOrg submits the certificate to the organization (final step)
@@ -112,13 +91,4 @@ func (s *CertService) SubmitToOrg(ctx context.Context, id uuid.UUID) (map[string
 		"message":       "گواهی اقدام ثبت و تایید شد — فرآیند تکمیل گردید",
 		"tracking_code": trackingCode,
 	}, nil
-}
-
-// UpdateCertInput for updating certificate details
-type UpdateCertInput struct {
-	ActionReference *string
-	ActionType      *string
-	ActionDate      *string
-	CertImageID     *string
-	CertUniqueID    *string
 }

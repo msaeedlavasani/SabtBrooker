@@ -42,7 +42,7 @@ type ClaimServiceRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*ClaimService, error)
 	RequestConsent(ctx context.Context, id uuid.UUID) error
 	VerifyConsent(ctx context.Context, id uuid.UUID) error
-	UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error
+	UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateClaimInput) error
 	AddDocument(ctx context.Context, claimID uuid.UUID, docType, fileID, description string) (*ClaimDocument, error)
 	DeleteDocument(ctx context.Context, docID uuid.UUID) error
 	ListDocuments(ctx context.Context, claimID uuid.UUID) ([]ClaimDocument, error)
@@ -57,7 +57,7 @@ type CertServiceRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*CertService, error)
 	RequestConsent(ctx context.Context, id uuid.UUID) error
 	VerifyConsent(ctx context.Context, id uuid.UUID) error
-	UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error
+	UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateCertInput) error
 	SubmitToOrg(ctx context.Context, id uuid.UUID) (caseID uuid.UUID, trackingCode string, err error)
 }
 

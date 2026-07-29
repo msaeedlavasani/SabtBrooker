@@ -93,38 +93,23 @@ func (r *PostgresCertServiceRepo) VerifyConsent(ctx context.Context, id uuid.UUI
 	return nil
 }
 
-func (r *PostgresCertServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
-	if len(fields) == 0 {
-		return nil
-	}
+func (r *PostgresCertServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateCertInput) error {
+	tag, err := r.db.Exec(ctx, `
+		UPDATE cert_services SET
+			action_reference = $2::action_reference,
+			action_type = $3::action_type,
+			action_date = $4,
+			cert_image_path = $5,
+			cert_unique_id = $6,
+			updated_at = NOW()
+		WHERE id = $1
+	`, id, input.ActionReference, input.ActionType, input.ActionDate, input.CertImagePath, input.CertUniqueID)
 
-	clauses := make([]string, 0)
-	args := make([]interface{}, 0)
-	idx := 1
-
-	for field, value := range fields {
-		switch field {
-		case "action_reference", "action_type":
-			clauses = append(clauses, fmt.Sprintf("%s = $%d::%s", field, idx, field))
-		case "action_date":
-			clauses = append(clauses, fmt.Sprintf("%s = $%d::date", field, idx))
-		default:
-			clauses = append(clauses, fmt.Sprintf("%s = $%d", field, idx))
-		}
-		args = append(args, value)
-		idx++
-	}
-	args = append(args, id)
-
-	query := fmt.Sprintf("UPDATE cert_services SET %s, updated_at = NOW() WHERE id = $%d",
-		joinClauses(clauses), idx)
-
-	tag, err := r.db.Exec(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update cert: %w", err)
+		return fmt.Errorf("failed to update cert service: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("cert %s not found", id)
+		return fmt.Errorf("cert service %s not found", id)
 	}
 	return nil
 }

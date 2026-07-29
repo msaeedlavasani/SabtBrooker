@@ -3,6 +3,7 @@ package handler
 import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
 )
 
@@ -77,58 +78,15 @@ func (h *ClaimHandler) UpdateDetails(c echo.Context) error {
 		return BadRequest(c, "شناسه نامعتبر")
 	}
 
-	var req struct {
-		ClaimType            string `json:"claim_type"`
-		OwnershipType        string `json:"ownership_type"`
-		MainPlateNumber      string `json:"main_plate_number"`
-		SubPlateNumber       string `json:"sub_plate_number"`
-		PlateSection         string `json:"plate_section"`
-		TotalShare           int    `json:"total_share"`
-		PartialShare         int    `json:"partial_share"`
-		HasGovernmentRights  bool   `json:"has_government_rights"`
-		TreasuryPaymentRef   string `json:"treasury_payment_ref"`
-		LegalAdviceRequested bool   `json:"legal_advice_requested"`
-		LegalAdviceMethod    string `json:"legal_advice_method"`
-	}
+	var req repository.UpdateClaimInput
 	if err := c.Bind(&req); err != nil {
 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
 	}
 
-	input := service.UpdateClaimInput{}
-	if req.ClaimType != "" {
-		input.ClaimType = &req.ClaimType
-	}
-	if req.OwnershipType != "" {
-		input.OwnershipType = &req.OwnershipType
-	}
-	if req.MainPlateNumber != "" {
-		input.MainPlateNumber = &req.MainPlateNumber
-	}
-	if req.SubPlateNumber != "" {
-		input.SubPlateNumber = &req.SubPlateNumber
-	}
-	if req.PlateSection != "" {
-		input.PlateSection = &req.PlateSection
-	}
-	if req.TotalShare > 0 {
-		input.TotalShare = &req.TotalShare
-	}
-	if req.PartialShare > 0 {
-		input.PartialShare = &req.PartialShare
-	}
-	input.HasGovernmentRights = &req.HasGovernmentRights
-	if req.TreasuryPaymentRef != "" {
-		input.TreasuryPaymentRef = &req.TreasuryPaymentRef
-	}
-	input.LegalAdviceRequested = &req.LegalAdviceRequested
-	if req.LegalAdviceMethod != "" {
-		input.LegalAdviceMethod = &req.LegalAdviceMethod
-	}
-
-	if err := h.svc.UpdateDetails(c.Request().Context(), id, input); err != nil {
+	if err := h.svc.UpdateDetails(c.Request().Context(), id, req); err != nil {
 		return InternalError(c, err.Error())
 	}
-	return OK(c, map[string]string{"message": "اطلاعات ادعا به‌روزرسانی شد"})
+	return OK(c, map[string]string{"message": "اطلاعات ادعا و مستندات به‌روزرسانی شد"})
 }
 
 func (h *ClaimHandler) AddDocument(c echo.Context) error {

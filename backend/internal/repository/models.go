@@ -190,3 +190,32 @@ type MapPhotoInput struct {
 	Latitude  float64 `json:"latitude"`
 	Longitude float64 `json:"longitude"`
 }
+
+type UpdateClaimInput struct {
+	ClaimType            string                 `json:"claim_type"`
+	OwnershipType        string                 `json:"ownership_type"`
+	MainPlateNumber      string                 `json:"main_plate_number"`
+	SubPlateNumber       string                 `json:"sub_plate_number"`
+	PlateSection         string                 `json:"plate_section"`
+	TotalShare           int                    `json:"total_share"`
+	PartialShare         int                    `json:"partial_share"`
+	HasGovernmentRights  bool                   `json:"has_government_rights"`
+	TreasuryPaymentRef   string                 `json:"treasury_payment_ref"`
+	LegalAdviceRequested bool                   `json:"legal_advice_requested"`
+	LegalAdviceMethod    string                 `json:"legal_advice_method"`
+	Documents            []ClaimDocumentInput   `json:"documents"`
+}
+
+type ClaimDocumentInput struct {
+	DocType     string `json:"doc_type"`
+	FilePath    string `json:"file_path"`
+	Description string `json:"description"`
+}
+
+type UpdateCertInput struct {
+	ActionReference string    `json:"action_reference"`
+	ActionType      string    `json:"action_type"`
+	ActionDate      time.Time `json:"action_date"`
+	CertImagePath   string    `json:"cert_image_path"`
+	CertUniqueID    string    `json:"cert_unique_id"`
+}
