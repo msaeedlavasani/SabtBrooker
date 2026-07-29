@@ -113,7 +113,7 @@ func main() {
 	
 	// Payment Provider (Stub for now)
 	paymentProvider := payment.NewZarinpalProvider("MOCK_MERCHANT_ID", true)
-	paymentSvc := service.NewPaymentService(paymentRepo, paymentProvider, userRepo)
+	paymentSvc := service.NewPaymentService(paymentRepo, caseRepo, paymentProvider, userRepo)
 
 	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
 	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)

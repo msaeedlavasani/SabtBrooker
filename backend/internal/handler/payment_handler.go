@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
 )
 
