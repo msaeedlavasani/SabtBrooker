@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import api from "@/lib/api";
 import { 
   LayoutDashboard, 
@@ -88,10 +89,13 @@ export default function Dashboard() {
               </div>
             </div>
             
-            <button className="flex w-full items-center justify-center gap-2 rounded-xl bg-navy p-4 font-bold text-white shadow-md transition-transform hover:scale-[1.02]">
+            <Link 
+              href="/dashboard/new-case"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-navy p-4 font-bold text-white shadow-md transition-transform hover:scale-[1.02]"
+            >
               <PlusCircle size={20} />
               ایجاد پرونده جدید
-            </button>
+            </Link>
           </div>
 
           {/* Main Content / Case List */}
@@ -162,9 +166,12 @@ function CaseRow({ c }: any) {
           آخرین به‌روزرسانی: {new Date(c.updated_at || c.created_at).toLocaleDateString('fa-IR')}
         </div>
       </div>
-      <button className="rounded-lg border border-line px-4 py-2 text-xs font-bold text-navy hover:bg-white hover:shadow-sm">
+      <Link 
+        href={`/dashboard/cases/${c.id}`}
+        className="rounded-lg border border-line px-4 py-2 text-xs font-bold text-navy hover:bg-white hover:shadow-sm"
+      >
         مشاهده جزئیات
-      </button>
+      </Link>
     </div>
   );
 }
