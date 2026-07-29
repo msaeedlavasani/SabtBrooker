@@ -65,9 +65,9 @@ backend/
 │       ├── map_handler.go          # Map service (۵ مرحله)
 │       ├── claim_handler.go        # Claim service + docs + AI advice
 │       └── cert_handler.go         # Cert service (۴ مرحله)
-├── migrations/                     # ۱۲ جفت up/down migration
-├── Dockerfile                      # Multi-stage build (golang:1.23 → alpine:3.20)
-├── go.mod                          # Go 1.23 dependencies
+├── migrations/                     # ۱۳ جفت up/down migration
+├── Dockerfile                      # Multi-stage build (golang:1.25 → alpine:3.20)
+├── go.mod                          # Go 1.25 dependencies
 └── go.sum
 ```
 
@@ -150,7 +150,8 @@ curl -s http://localhost:8080/health
 
 ## ۹. نکات مهم فنی
 
-1. **Go روی مسیر `/usr/local/go/bin/go`** نسخه 1.26.5 نصب شده
+1. **Go نسخه 1.26.5** روی مک در مسیر `/usr/local/go/bin/go` نصب شده است.
+2. **CI و Dockerfile** برای سازگاری با `go.mod` روی نسخه **1.25** تنظیم شده‌اند.
 2. **golang-migrate CLI** با `make migrate-install` نصب میشه
 3. **Postgres روی پورت 5433** (نه 5432 — conflict با Local)
 4. **توکن JWT توی context به صورت string** ذخیره میشه (نه uuid.UUID)
