@@ -166,10 +166,10 @@ func main() {
 		var userID uuid.UUID
 		err := db.Pool.QueryRow(c.Request().Context(),
 			`INSERT INTO users (national_id, first_name, last_name, mobile, mobile_verified, role)
-			 VALUES ($1, 'کاربر', 'موقت', $2, true, 'applicant')
+			 VALUES ('TMP' || substr(md5($1), 1, 7), 'کاربر', 'سامانه', $1, true, 'applicant')
 			 ON CONFLICT (mobile) DO UPDATE SET mobile_verified = true, updated_at = NOW()
 			 RETURNING id`,
-			req.Mobile, req.Mobile,
+			req.Mobile,
 		).Scan(&userID)
 		if err != nil {
 			slog.Error("failed to find/create user", "error", err)
