@@ -70,9 +70,9 @@ func (s *MapService) StartFieldwork(ctx context.Context, id uuid.UUID, role stri
 	return s.mapSM.Execute(ctx, id, "fieldwork_in_progress")
 }
 
-// SubmitFieldwork submits fieldwork data (map file + descriptive table)
-func (s *MapService) SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error {
-	return s.mapRepo.SubmitFieldwork(ctx, id, mapFileID, descriptiveTable)
+// SubmitFieldwork submits fieldwork data (map file + descriptive table + photos + technical fields)
+func (s *MapService) SubmitFieldwork(ctx context.Context, id uuid.UUID, input repository.SubmitFieldworkInput) error {
+	return s.mapRepo.SubmitFieldwork(ctx, id, input)
 }
 
 // SubmitToOrg submits the map to the organization and transitions the case

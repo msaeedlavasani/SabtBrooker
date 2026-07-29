@@ -129,23 +129,56 @@ func (r *PostgresMapServiceRepo) AssignExpert(ctx context.Context, id uuid.UUID,
 	return tx.Commit(ctx)
 }
 
-func (r *PostgresMapServiceRepo) SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error {
-	tag, err := r.db.Exec(ctx, `
+func (r *PostgresMapServiceRepo) SubmitFieldwork(ctx context.Context, id uuid.UUID, input SubmitFieldworkInput) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Update map_services
+	tag, err := tx.Exec(ctx, `
 		UPDATE map_services SET
-			map_file_path = $2,
-			descriptive_table = $3,
+			property_type = $2,
+			approx_area_sqm = $3,
+			land_use = $4,
+			ownership_type = $5,
+			has_building = $6,
+			annex_count = $7,
+			geo_latitude = $8,
+			geo_longitude = $9,
+			geo_location = ST_SetSRID(ST_MakePoint($9, $8), 4326),
+			map_file_path = $10,
+			map_format = $11,
+			descriptive_table = $12,
+			grant_access_to_others = $13,
 			fieldwork_completed_at = NOW(),
 			status = 'fieldwork_done',
 			updated_at = NOW()
 		WHERE id = $1 AND status::text = 'fieldwork_in_progress'
-	`, id, mapFileID, descriptiveTable)
+	`, id, input.PropertyType, input.ApproxAreaSqm, input.LandUse, input.OwnershipType,
+		input.HasBuilding, input.AnnexCount, input.GeoLatitude, input.GeoLongitude,
+		input.MapFilePath, input.MapFormat, input.DescriptiveTable, input.GrantAccessToOthers)
+
 	if err != nil {
-		return fmt.Errorf("failed to submit fieldwork: %w", err)
+		return fmt.Errorf("failed to update map service: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("سرویس در وضعیت مناسب برای ثبت عملیات میدانی نیست")
 	}
-	return nil
+
+	// 2. Insert photos
+	for _, p := range input.Photos {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO map_photos (map_service_id, file_path, side, photo_latitude, photo_longitude, photo_location)
+			VALUES ($1, $2, $3, $4, $5, ST_SetSRID(ST_MakePoint($5, $4), 4326))
+		`, id, p.FilePath, p.Side, p.Latitude, p.Longitude)
+		if err != nil {
+			return fmt.Errorf("failed to insert map photo: %w", err)
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 // SubmitToOrg simulates submitting to organization and auto-approves

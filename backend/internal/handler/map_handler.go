@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
 )
 
@@ -96,18 +97,15 @@ func (h *MapHandler) SubmitFieldwork(c echo.Context) error {
 		return BadRequest(c, "شناسه نامعتبر")
 	}
 
-	var req struct {
-		MapFileID        string                 `json:"map_file_id"`
-		DescriptiveTable map[string]interface{} `json:"descriptive_table"`
-	}
+	var req repository.SubmitFieldworkInput
 	if err := c.Bind(&req); err != nil {
 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
 	}
 
-	if err := h.svc.SubmitFieldwork(c.Request().Context(), id, req.MapFileID, req.DescriptiveTable); err != nil {
+	if err := h.svc.SubmitFieldwork(c.Request().Context(), id, req); err != nil {
 		return InternalError(c, err.Error())
 	}
-	return OK(c, map[string]string{"message": "اطلاعات میدانی ثبت شد — آماده ارسال به سازمان"})
+	return OK(c, map[string]string{"message": "اطلاعات میدانی و عکس‌ها ثبت شد — آماده ارسال به سازمان"})
 }
 
 func (h *MapHandler) SubmitToOrg(c echo.Context) error {

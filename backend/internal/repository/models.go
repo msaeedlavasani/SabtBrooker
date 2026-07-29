@@ -165,3 +165,28 @@ type AIAdviceLog struct {
 	References []string  `json:"legal_references"`
 	Confidence float64   `json:"confidence_score"`
 }
+
+// Input structs for mutations
+
+type SubmitFieldworkInput struct {
+	PropertyType        string                 `json:"property_type"`
+	ApproxAreaSqm       float64                `json:"approx_area_sqm"`
+	LandUse             string                 `json:"land_use"`
+	OwnershipType       string                 `json:"ownership_type"`
+	HasBuilding         bool                   `json:"has_building"`
+	AnnexCount          int                    `json:"annex_count"`
+	GeoLatitude         float64                `json:"geo_latitude"`
+	GeoLongitude        float64                `json:"geo_longitude"`
+	MapFilePath         string                 `json:"map_file_path"`
+	MapFormat           string                 `json:"map_format"`
+	DescriptiveTable    map[string]interface{} `json:"descriptive_table"`
+	Photos              []MapPhotoInput        `json:"photos"`
+	GrantAccessToOthers bool                   `json:"grant_access_to_others"`
+}
+
+type MapPhotoInput struct {
+	FilePath  string  `json:"file_path"`
+	Side      string  `json:"side"` // north, south, east, west
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+}
