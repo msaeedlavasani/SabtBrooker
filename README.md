@@ -7,7 +7,7 @@
 - **Backend (Go):** ۱۰۰٪ کامل — شامل Auth, Case Management, Workflows, PostGIS, Zarinpal, SMS.
 - **Web Frontend (Next.js):** ۱۰۰٪ کامل (PWA Enabled) — ویزاردهای هوشمند، نصب‌پذیر روی اندروید و iOS.
 - **Mobile App (Flutter):** ۸۰٪ کامل — قابلیت Geo-tagging، سینک آفلاین و بازدید میدانی.
-- **Security:** در حال ممیزی (۴۰٪) — ممیزی IDOR و امنیت پرداخت تکمیل شد (تیر ۱۴۰۵).
+- **Security:** در حال ممیزی (۸۰٪) — ممیزی IDOR، امنیت پرداخت و پیشگیری از SQL Injection تکمیل شد (تیر ۱۴۰۵).
 - **CI/CD:** عملیاتی — تمام تست‌ها و بیلدهای بک‌اِند و فرانت‌اِند سبز هستند.
 
 ## 🛠 پشته فنی (Full Stack)

@@ -111,11 +111,24 @@ func (r *PostgresCaseRepo) UpdateByID(ctx context.Context, id uuid.UUID, fields 
 		return nil
 	}
 
+	// Allow-list for allowed field names to prevent SQL injection in column names
+	allowedFields := map[string]bool{
+		"district":       true,
+		"village":        true,
+		"address_detail": true,
+		"status":         true,
+		"province":       true,
+		"city":           true,
+	}
+
 	setClauses := make([]string, 0, len(fields))
 	args := make([]interface{}, 0, len(fields)+1)
 	argIdx := 1
 
 	for field, value := range fields {
+		if !allowedFields[field] {
+			return fmt.Errorf("field %s is not allowed for update", field)
+		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
 		args = append(args, value)
 		argIdx++
