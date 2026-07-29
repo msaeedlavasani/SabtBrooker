@@ -161,7 +161,22 @@ func main() {
 		if err := otpService.Verify(c.Request().Context(), req.Mobile, req.OTP, req.Purpose); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
-		tokens, err := jwtManager.GenerateTokenPair(uuid.Nil, "applicant", req.Mobile)
+
+		// Find or create user
+		var userID uuid.UUID
+		err := db.Pool.QueryRow(c.Request().Context(),
+			`INSERT INTO users (national_id, first_name, last_name, mobile, mobile_verified, role)
+			 VALUES ($1, 'کاربر', 'موقت', $2, true, 'applicant')
+			 ON CONFLICT (mobile) DO UPDATE SET mobile_verified = true, updated_at = NOW()
+			 RETURNING id`,
+			req.Mobile, req.Mobile,
+		).Scan(&userID)
+		if err != nil {
+			slog.Error("failed to find/create user", "error", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در ایجاد کاربر"})
+		}
+
+		tokens, err := jwtManager.GenerateTokenPair(userID, "applicant", req.Mobile)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در تولید توکن"})
 		}
