@@ -57,12 +57,18 @@ func (m *JWTManager) loadKeys() error {
 		if block == nil {
 			return fmt.Errorf("failed to decode private key PEM")
 		}
-		m.privateKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+		parsedKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
 		if err != nil {
 			// Try PKCS1
 			m.privateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 			if err != nil {
 				return fmt.Errorf("failed to parse private key: %w", err)
+			}
+		} else {
+			var ok bool
+			m.privateKey, ok = parsedKey.(*rsa.PrivateKey)
+			if !ok {
+				return fmt.Errorf("private key is not RSA")
 			}
 		}
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/config"
 )
@@ -63,7 +64,7 @@ func (p *Postgres) HealthCheck(ctx context.Context) error {
 }
 
 // ExecTx executes a function within a database transaction
-func (p *Postgres) ExecTx(ctx context.Context, fn func(tx pgxpool.Tx) error) error {
+func (p *Postgres) ExecTx(ctx context.Context, fn func(tx pgx.Tx) error) error {
 	tx, err := p.Pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
