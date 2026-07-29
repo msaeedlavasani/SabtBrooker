@@ -11,26 +11,43 @@ import (
 
 type PaymentService struct {
 	repo     repository.PaymentRepository
+	caseRepo repository.CaseRepository
 	provider payment.PaymentProvider
 	userRepo repository.UserRepository
 }
 
-func NewPaymentService(repo repository.PaymentRepository, provider payment.PaymentProvider, userRepo repository.UserRepository) *PaymentService {
-	return &PaymentService{repo: repo, provider: provider, userRepo: userRepo}
+func NewPaymentService(repo repository.PaymentRepository, caseRepo repository.CaseRepository, provider payment.PaymentProvider, userRepo repository.UserRepository) *PaymentService {
+	return &PaymentService{repo: repo, caseRepo: caseRepo, provider: provider, userRepo: userRepo}
 }
 
-func (s *PaymentService) InitiatePayment(ctx context.Context, caseID uuid.UUID, serviceType string, callbackURL string) (string, error) {
+func (s *PaymentService) InitiatePayment(ctx context.Context, caseID uuid.UUID, userIDStr string, role string, serviceType string, callbackURL string) (string, error) {
+	// 0. Auth & Access Control
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return "", fmt.Errorf("invalid user_id")
+	}
+
+	c, err := s.caseRepo.GetByID(ctx, caseID)
+	if err != nil {
+		return "", fmt.Errorf("case not found")
+	}
+
+	if role == "applicant" && c.ApplicantID != userID {
+		return "", fmt.Errorf("unauthorized: you do not own this case")
+	}
+
 	// 1. Get active tariff
 	tariff, err := s.repo.GetActiveTariff(ctx, serviceType)
 	if err != nil {
 		return "", err
 	}
 
-	// 2. Get user info for provider
-	// We need case to get user
-	// For simplicity, assuming caller provides enough or we fetch
-	// Let's assume we fetch user via case logic (stubbed here)
-	mobile := "09120000000" 
+	// 2. Get real user info
+	user, err := s.userRepo.FindByID(ctx, c.ApplicantID)
+	if err != nil {
+		return "", fmt.Errorf("applicant not found")
+	}
+	mobile := user.Mobile
 
 	// 3. Request from provider
 	desc := fmt.Sprintf("پرداخت تعرفه %s برای پرونده %s", serviceType, caseID.String()[:8])

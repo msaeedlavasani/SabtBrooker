@@ -37,7 +37,14 @@ func (h *PaymentHandler) Initiate(c echo.Context) error {
 		return BadRequest(c, "invalid case_id")
 	}
 
-	url, err := h.svc.InitiatePayment(c.Request().Context(), caseID, req.ServiceType, req.CallbackURL)
+	url, err := h.svc.InitiatePayment(
+		c.Request().Context(),
+		caseID,
+		middleware.GetUserID(c),
+		middleware.GetUserRole(c),
+		req.ServiceType,
+		req.CallbackURL,
+	)
 	if err != nil {
 		return InternalError(c, err.Error())
 	}
