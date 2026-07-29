@@ -3,9 +3,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Screen, Field } from '@/lib/workflow-configs';
-import { CheckCircle2, Upload, Plus, X, Loader2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Plus, X, Loader2, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { clsx } from 'clsx';
 import api from '@/lib/api';
+import FileUpload from '@/components/ui/FileUpload';
 
 interface FormWizardProps {
   screens: Screen[];
@@ -286,16 +287,11 @@ function renderField(
             );
         case 'file':
             return (
-                <div 
-                    onClick={() => onChange(f.key, !val)}
-                    className={clsx(
-                        "flex items-center justify-center gap-2 p-3 border-2 border-dashed rounded-xl cursor-pointer transition-colors",
-                        val ? "bg-success-bg border-success text-success" : "bg-gray-50 border-line text-ink-soft hover:bg-gray-100"
-                    )}
-                >
-                    {val ? <CheckCircle2 size={18} /> : <Upload size={18} />}
-                    <span className="text-xs font-bold">{val ? 'بارگذاری شد' : 'انتخاب فایل'}</span>
-                </div>
+                <FileUpload 
+                    label={f.label}
+                    onUploadSuccess={(fileId) => onChange(f.key, fileId)}
+                    accept={f.key.includes('map') ? '.dwg,.pdf,.zip' : 'image/*,.pdf'}
+                />
             );
         case 'repeat':
             const items = data[f.key] || [];
