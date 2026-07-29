@@ -130,7 +130,7 @@ func main() {
 			req.Purpose = "auth"
 		}
 
-		otp, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
+		_, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
 		if err != nil {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
 		}
