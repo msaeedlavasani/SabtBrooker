@@ -57,7 +57,7 @@ export default function NewCasePage() {
       
       // 2. Update Capacity (if needed, but for now we use the endpoint defined in handoff)
       if (formData.capacity !== "principal") {
-        await api.put(`/v1/cases/${caseId}/capacity`, { capacity: formData.capacity });
+        await api.put(`/v1/cases/${caseId}/capacity`, { applicant_capacity: formData.capacity });
       }
 
       router.push("/dashboard");
