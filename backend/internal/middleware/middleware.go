@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/auth"
 )
@@ -44,8 +46,8 @@ func AuthRequired(jwtManager *auth.JWTManager) echo.MiddlewareFunc {
 				})
 			}
 
-			// Inject user info into context
-			c.Set("user_id", claims.UserID)
+			// Inject user info into context (store as string for downstream compatibility)
+			c.Set("user_id", claims.UserID.String())
 			c.Set("user_role", claims.Role)
 			c.Set("mobile", claims.Mobile)
 
@@ -85,7 +87,14 @@ func GetUserID(c echo.Context) string {
 	if id == nil {
 		return ""
 	}
-	return id.(string)
+	switch v := id.(type) {
+	case string:
+		return v
+	case uuid.UUID:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 // GetUserRole extracts user role from Echo context

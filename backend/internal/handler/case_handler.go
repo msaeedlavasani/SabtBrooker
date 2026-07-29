@@ -35,7 +35,8 @@ func (h *CaseHandler) RegisterRoutes(g *echo.Group) {
 
 // List returns all cases for the authenticated user
 func (h *CaseHandler) List(c echo.Context) error {
-	userID := middleware.GetUserID(c)
+	userIDStr := middleware.GetUserID(c)
+	userID, _ := uuid.Parse(userIDStr)
 	role := middleware.GetUserRole(c)
 
 	var p PageParams
