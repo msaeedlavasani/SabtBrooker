@@ -84,7 +84,7 @@ func (s *PaymentService) VerifyPayment(ctx context.Context, token string) error 
 	}
 
 	if pay.Status == "paid" {
-		return nil // already verified
+		return fmt.Errorf("transaction already processed and paid")
 	}
 
 	// 2. Verify with provider
