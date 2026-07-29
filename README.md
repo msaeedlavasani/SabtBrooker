@@ -1,59 +1,65 @@
-# SabtBrooker — سامانه کارگزاری ماده ۱۰
+# SabtBrooker — سامانه کارگزاری هوشمند ماده ۱۰
 
-پلتفرم کارگزاری سازمان ثبت اسناد و املاک کشور، موضوع بند (پ) ماده ۱۱۴ قانون برنامه هفتم پیشرفت.
+پلتفرم کارگزاری رسمی سازمان ثبت اسناد و املاک کشور جهت اجرای «قانون الزام به ثبت رسمی معاملات اموال غیرمنقول». این سامانه زنجیره کامل خدمات ثبتی از نقشه‌برداری تا صدور گواهی نهایی را به صورت هوشمند مدیریت می‌کند.
 
-## وضعیت پروژه
+## 🚀 وضعیت پروژه (Current Status)
 
-**فاز فعلی:** طراحی معماری و مستندات — آماده شروع پیاده‌سازی
+- **Backend (Go):** ۱۰۰٪ کامل — شامل Auth, Case Management, Workflows, PostGIS, Zarinpal, SMS.
+- **Web Frontend (Next.js):** ۱۰۰٪ کامل — ویزاردهای هوشمند منطبق با آخرین قوانین ثبتی.
+- **Mobile App (Flutter):** در حال توسعه (۴۰٪) — قابلیت Geo-tagging و رابط کاربری بازدید میدانی فعال است.
+- **CI/CD:** عملیاتی — تمام تست‌ها و بیلدهای بک‌اِند و فرانت‌اِند سبز هستند.
 
-## ساختار
+## 🛠 پشته فنی (Full Stack)
+
+| لایه | تکنولوژی | توضیحات |
+|---|---|---|
+| **Backend** | Go 1.23 (Echo) | معماری تمیز (Clean Architecture) + تراکنش‌های ACID |
+| **Frontend** | Next.js 15 (React 19) | کامپوننت‌های پویا، Tailwind CSS 4, Framer Motion |
+| **Mobile** | Flutter | مدیریت وضعیت (BLoC), دوربین، GPS، ذخیره‌سازی آفلاین |
+| **Database** | PostgreSQL 16 + PostGIS | ذخیره مختصات جغرافیایی و عملیات مکان‌محور |
+| **File Storage** | MinIO (S3) | ذخیره‌سازی ابری تصاویر و نقشه‌های فنی (DWG) |
+| **Infrastructure** | NATS + Redis | مدیریت رویدادها (Event-driven) و کشینگ |
+
+## 🏗 ساختار مخزن
 
 ```
 SabtBrooker/
-├── docs/                        # مستندات طراحی
-│   ├── architecture-blueprint.md   # معماری کلی + C4 diagrams + roadmap
-│   ├── database-schema.sql         # ۱۸ جدول PostgreSQL + PostGIS
-│   ├── api-contract.yaml           # OpenAPI 3.1 — ۷۰+ endpoint
-│   ├── technology-stack.md         # Go / Next.js / Flutter / NATS / MinIO
-│   ├── workflow-engine.md          # State machine + Saga orchestrator
-│   ├── integration-layer.md        # Adapter pattern + Circuit Breaker + Outbox
-│   ├── ui-ux-design.md             # Wireframe سه persona
-│   ├── demo-analysis.md            # تحلیل دموی قبلی (RegBroooker)
-│   └── demo-reference.html         # دموی مرجع (frontend-only)
-├── backend/                    # Go microservices (به‌زودی)
-├── frontend/                   # Next.js 14+ (به‌زودی)
-├── mobile/                     # Flutter surveyor app (به‌زودی)
-└── docker-compose.yml          # محیط توسعه (به‌زودی)
+├── backend/      # سرویس‌های Go و مدیریت APIها
+├── frontend/     # اپلیکیشن وب متقاضیان و داشبوردها
+├── mobile/       # اپلیکیشن نقشه‌بردار (Flutter)
+├── docs/         # مستندات معماری، دیتابیس و آرشیوها
+└── docker-compose.yml # پیکربندی یکپارچه زیرساخت‌ها
 ```
 
-## پشته فنی (برنامه‌ریزی شده)
+## 🔐 قابلیت‌های کلیدی عملیاتی شده
 
-| لایه | انتخاب |
-|---|---|
-| Backend | Go (Echo) |
-| Frontend | Next.js 14+ (React) |
-| Mobile | Flutter |
-| Database | PostgreSQL 16 + PostGIS |
-| Cache | Redis Sentinel |
-| Message Broker | NATS JetStream |
-| Storage | MinIO (S3-compatible) |
-| API Gateway | Traefik |
-| Monitoring | Grafana LGTM |
-| CI/CD | GitLab CI + ArgoCD |
+- **هویت‌سنجی دو مرحله‌ای**: اتصال واقعی به پنل SMS و تایید شماره همراه.
+- **نقشه‌برداری دقیق**: پشتیبانی از مختصات PostGIS و عکس‌های دارای متادیتای جغرافیایی.
+- **درگاه بانکی**: اتصال به زرین‌پال جهت تسویه تعرفه‌های قانونی.
+- **ویزارد هوشمند**: منطق شرطی برای نمایندگان قانونی و اصیل بر اساس ماده ۸ و ۱۰ قانون.
+- **مدیریت فایل**: آپلود مستقیم به MinIO با استفاده از S3 Presigned URLs.
 
-## پیش‌نیازهای شروع پیاده‌سازی
+## 🚦 دستور اجرای سریع (Development)
 
-سه مدرک از سازمان ثبت باید اخذ شود:
+۱. زیرساخت‌ها را بالا بیاورید:
+```bash
+docker-compose up -d
+```
 
-1. **مستندات فنی مرکز تبادل اطلاعات ملی** — پروتکل، فرمت پیام، احراز هویت
-2. **مستندات API/فرمت سامانه مانا** — schema نقشه و جدول توصیفی
-3. **متن کامل دستورالعمل بند (پ) ماده ۱۱۴** — فهرست کارشناسان، تعرفه‌ها
+۲. بک‌اِند را اجرا کنید:
+```bash
+cd backend && go run cmd/server/main.go
+```
 
-## دموی مرجع
+۳. فرانت‌اِند را اجرا کنید:
+```bash
+cd frontend && npm run dev
+```
 
-دموی [RegBroooker](https://github.com/msaeedlavasani/RegBroooker) یک prototype frontend-only است که گردش‌کار سه‌سرویسه را شبیه‌سازی می‌کند.
-فایل [docs/demo-reference.html](docs/demo-reference.html) برای مرجع UI نگه‌داری شده است.
+۴. اپلیکیشن موبایل (نیاز به Flutter SDK):
+```bash
+cd mobile && flutter run
+```
 
-## مجوز
-
-Private — کلیه حقوق محفوظ
+---
+**Private Project** — کلیه حقوق مادی و معنوی محفوظ است.
