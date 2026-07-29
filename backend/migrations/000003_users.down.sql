@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS experts;
+DROP TABLE IF EXISTS users;

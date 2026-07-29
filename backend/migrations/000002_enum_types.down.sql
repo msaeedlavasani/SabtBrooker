@@ -1,0 +1,16 @@
+DROP TYPE IF EXISTS audit_event_type;
+DROP TYPE IF EXISTS notification_status;
+DROP TYPE IF EXISTS notification_channel;
+DROP TYPE IF EXISTS payment_type;
+DROP TYPE IF EXISTS payment_status;
+DROP TYPE IF EXISTS action_type;
+DROP TYPE IF EXISTS action_reference;
+DROP TYPE IF EXISTS document_type;
+DROP TYPE IF EXISTS ownership_type;
+DROP TYPE IF EXISTS claim_type;
+DROP TYPE IF EXISTS applicant_capacity;
+DROP TYPE IF EXISTS user_role;
+DROP TYPE IF EXISTS cert_service_status;
+DROP TYPE IF EXISTS claim_service_status;
+DROP TYPE IF EXISTS map_service_status;
+DROP TYPE IF EXISTS case_status;
