@@ -61,6 +61,15 @@ type CertServiceRepository interface {
 	SubmitToOrg(ctx context.Context, id uuid.UUID) (caseID uuid.UUID, trackingCode string, err error)
 }
 
+// PaymentRepository — مدیریت تعرفه‌ها و تراکنش‌های بانکی
+type PaymentRepository interface {
+	GetActiveTariff(ctx context.Context, serviceType string) (*Tariff, error)
+	CreatePayment(ctx context.Context, p *Payment) (*Payment, error)
+	GetPaymentByID(ctx context.Context, id uuid.UUID) (*Payment, error)
+	GetPaymentByToken(ctx context.Context, token string) (*Payment, error)
+	UpdatePaymentStatus(ctx context.Context, id uuid.UUID, status string, ref string) error
+}
+
 // AuditLogRepository — لاگ ممیزی (append-only)
 type AuditLogRepository interface {
 	Record(ctx context.Context, event *AuditEvent) error

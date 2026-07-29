@@ -20,6 +20,7 @@ import (
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/notification"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/outbox"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/payment"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/scheduler"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
@@ -77,6 +78,7 @@ func main() {
 	mapRepo := repository.NewPostgresMapServiceRepo(db.Pool)
 	claimRepo := repository.NewPostgresClaimServiceRepo(db.Pool)
 	certRepo := repository.NewPostgresCertServiceRepo(db.Pool)
+	paymentRepo := repository.NewPostgresPaymentRepo(db.Pool)
 	auditRepo := repository.NewPostgresAuditLogRepo(db.Pool)
 	aiAdviceRepo := repository.NewPostgresAIAdviceRepo(db.Pool)
 
@@ -108,6 +110,11 @@ func main() {
 	// ── Services ────────────────────────────────────────────────
 
 	notifySvc := notification.NewService(db.Pool, rdb, nil)
+	
+	// Payment Provider (Stub for now)
+	paymentProvider := payment.NewZarinpalProvider("MOCK_MERCHANT_ID", true)
+	paymentSvc := service.NewPaymentService(paymentRepo, paymentProvider, userRepo)
+
 	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
 	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)
 	claimSvc := service.NewClaimService(claimRepo, caseSM, claimSM, auditRepo, aiAdviceRepo)
@@ -129,6 +136,7 @@ func main() {
 	mapHandler := handler.NewMapHandler(mapSvc)
 	claimHandler := handler.NewClaimHandler(claimSvc)
 	certHandler := handler.NewCertHandler(certSvc)
+	paymentHandler := handler.NewPaymentHandler(paymentSvc)
 	storageHandler := handler.NewStorageHandler(store)
 
 	// ── Background Services ─────────────────────────────────────
@@ -175,6 +183,7 @@ func main() {
 	mapHandler.RegisterRoutes(protected.Group("/map-services"))
 	claimHandler.RegisterRoutes(protected.Group("/claim-services"))
 	certHandler.RegisterRoutes(protected.Group("/cert-services"))
+	paymentHandler.RegisterRoutes(protected.Group("/payments"))
 	storageHandler.RegisterRoutes(protected.Group("/storage"))
 
 	// ── Graceful Shutdown ───────────────────────────────────────

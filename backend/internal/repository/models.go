@@ -219,3 +219,28 @@ type UpdateCertInput struct {
 	CertImagePath   string    `json:"cert_image_path"`
 	CertUniqueID    string    `json:"cert_unique_id"`
 }
+
+type Tariff struct {
+	ID            uuid.UUID `json:"id"`
+	ServiceType   string    `json:"service_type"`
+	MaxAmount     int64     `json:"max_amount"`
+	NonRefundable int64     `json:"non_refundable"`
+	EffectiveFrom time.Time `json:"effective_from"`
+	Version       string    `json:"version"`
+}
+
+type Payment struct {
+	ID             uuid.UUID `json:"id"`
+	CaseID         uuid.UUID `json:"case_id"`
+	ServiceType    string    `json:"service_type"`
+	Amount         int64     `json:"amount"`
+	PaymentType    string    `json:"payment_type"`
+	Status         string    `json:"status"`
+	PSPReference   string    `json:"psp_reference"`
+	PSPToken       string    `json:"psp_token"`
+	PaymentURL     string    `json:"payment_url"`
+	PaidAt         *time.Time `json:"paid_at"`
+	TariffVersion  string    `json:"tariff_version"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
