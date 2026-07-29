@@ -1,0 +1,1941 @@
+openapi: "3.1.0"
+info:
+  title: سامانه کارگزاری ماده ۱۰ — API Contract
+  version: "1.0.0"
+  description: |
+    قرارداد API سامانه کارگزاری سازمان ثبت اسناد و املاک کشور.
+    
+    **یادداشت‌های امنیتی:**
+    - تمام endpointها (به‌جز health check و login) نیاز به JWT Bearer Token دارند.
+    - Access Token: ۱۵ دقیقه | Refresh Token: ۷ روز (با rotation).
+    - Rate Limiting روی تمام endpointها اعمال می‌شود.
+    - فایل‌ها از طریق Pre-signed URL (انقضا ۵ دقیقه) ارائه می‌شوند.
+    
+    **قالب خطاها:**
+    ```json
+    {
+      "error": {
+        "code": "ERROR_CODE",
+        "message_fa": "پیام خطا به فارسی",
+        "message_en": "Error message in English",
+        "details": {}
+      }
+    }
+    ```
+
+servers:
+  - url: https://api.{domain}/v1
+    description: Production
+  - url: https://api-staging.{domain}/v1
+    description: Staging
+
+# ============================================================================
+# Security Scheme
+# ============================================================================
+security:
+  - BearerAuth: []
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "JWT Access Token — RS256, 15min expiry"
+
+  # --------------------------------------------------------------------------
+  # Common Schemas
+  # --------------------------------------------------------------------------
+  schemas:
+
+    # --- Auth ---
+    SendOtpRequest:
+      type: object
+      required: [mobile]
+      properties:
+        mobile:
+          type: string
+          pattern: '^09\d{9}$'
+          example: "09123456789"
+          description: شماره موبایل ۱۱ رقمی
+        purpose:
+          type: string
+          enum: [auth, consent, warning]
+          default: auth
+
+    VerifyOtpRequest:
+      type: object
+      required: [mobile, otp]
+      properties:
+        mobile:
+          type: string
+          pattern: '^09\d{9}$'
+        otp:
+          type: string
+          pattern: '^\d{4,6}$'
+          description: کد ۴ تا ۶ رقمی
+        purpose:
+          type: string
+          enum: [auth, consent, warning]
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT — ۱۵ دقیقه
+        refresh_token:
+          type: string
+          description: Refresh Token — ۷ روز
+        token_type:
+          type: string
+          example: "Bearer"
+        expires_in:
+          type: integer
+          example: 900
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+
+    # --- User ---
+    UserResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        national_id: { type: string, example: "0012345678" }
+        first_name: { type: string }
+        last_name: { type: string }
+        mobile: { type: string }
+        mobile_verified: { type: boolean }
+        role: { type: string, enum: [applicant, legal_expert, survey_expert, admin, auditor] }
+        sana_status: { type: string }
+        is_alive: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    RegisterApplicantRequest:
+      type: object
+      required: [national_id, first_name, last_name, mobile, birth_date]
+      properties:
+        national_id: { type: string, pattern: '^\d{10}$' }
+        first_name: { type: string, maxLength: 100 }
+        last_name: { type: string, maxLength: 100 }
+        mobile: { type: string, pattern: '^09\d{9}$' }
+        birth_date: { type: string, format: date }
+
+    # --- Case ---
+    CaseResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [draft, map_in_progress, map_completed, claim_in_progress, claim_completed, cert_in_progress, cert_completed, expired, rejected, cancelled] }
+        applicant_capacity: { type: string }
+        legal_expert: { $ref: '#/components/schemas/ExpertBrief' }
+        survey_expert: { $ref: '#/components/schemas/ExpertBrief' }
+        map_tracking_code: { type: string, nullable: true }
+        claim_tracking_code: { type: string, nullable: true }
+        cert_tracking_code: { type: string, nullable: true }
+        deadline_2years: { type: string, format: date-time, nullable: true }
+        deadline_5months: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CaseListResponse:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/CaseResponse' } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    CreateCaseRequest:
+      type: object
+      required: [province, city, address_detail]
+      properties:
+        province: { type: string }
+        city: { type: string }
+        district: { type: string }
+        village: { type: string }
+        postal_code: { type: string, pattern: '^\d{10}$' }
+        address_detail: { type: string }
+
+    UpdateApplicantCapacityRequest:
+      type: object
+      required: [applicant_capacity]
+      properties:
+        applicant_capacity: { type: string, enum: [principal, legal_rep_natural, legal_rep_legal] }
+        # برای legal_rep_legal
+        legal_entity_id: { type: string, pattern: '^\d{11}$' }
+        legal_entity_name: { type: string }
+        # مشترک
+        proxy_document_type: { type: string }
+        proxy_document_id: { type: string }
+        proxy_document_date: { type: string, format: date }
+        proxy_verification_code: { type: string }
+        proxy_document_file: { type: string, description: "شناسه فایل آپلودشده (بعد از upload جداگانه)" }
+
+    ExpertBrief:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        expert_type: { type: string }
+        license_number: { type: string }
+
+    # --- Map Service ---
+    MapServiceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        status: { type: string }
+        property_type: { type: string }
+        approx_area_sqm: { type: number }
+        geo_latitude: { type: number }
+        geo_longitude: { type: number }
+        map_file_path: { type: string, nullable: true }
+        map_download_url: { type: string, nullable: true, description: "Pre-signed URL با انقضا ۵ دقیقه" }
+        tracking_code: { type: string, nullable: true }
+        org_rejection_reason: { type: string, nullable: true }
+        grant_access_to_others: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    CreateMapServiceRequest:
+      type: object
+      required: [case_id]
+      properties:
+        case_id: { type: string, format: uuid }
+        property_type: { type: string }
+        approx_area_sqm: { type: number }
+        land_use: { type: string }
+        ownership_type: { type: string }
+        has_building: { type: boolean }
+        annex_count: { type: integer }
+        geo_latitude: { type: number, minimum: 25, maximum: 40 }
+        geo_longitude: { type: number, minimum: 44, maximum: 64 }
+        grant_access_to_others: { type: boolean }
+        access_granted_to: { type: array, items: { $ref: '#/components/schemas/AccessGrant' } }
+
+    AccessGrant:
+      type: object
+      properties:
+        national_id: { type: string }
+        name: { type: string }
+        relation: { type: string }
+
+    SubmitFieldworkRequest:
+      type: object
+      required: [map_file_id, descriptive_table, photo_ids]
+      properties:
+        map_file_id: { type: string, description: "شناسه فایل نقشه آپلودشده" }
+        descriptive_table: { type: object }
+        photo_ids: { type: array, items: { type: string, format: uuid }, minItems: 4, maxItems: 4 }
+
+    MapPhotoResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        side: { type: string, enum: [north, south, east, west] }
+        photo_url: { type: string }
+        photo_latitude: { type: number }
+        photo_longitude: { type: number }
+        exif_valid: { type: boolean }
+        exif_validation_note: { type: string }
+
+    # --- Claim Service ---
+    ClaimServiceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        status: { type: string }
+        map_tracking_code: { type: string }
+        claim_type: { type: string }
+        ownership_type: { type: string }
+        main_plate_number: { type: string }
+        sub_plate_number: { type: string }
+        tracking_code: { type: string, nullable: true }
+        documents: { type: array, items: { $ref: '#/components/schemas/ClaimDocumentResponse' } }
+        legal_advice_requested: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    CreateClaimServiceRequest:
+      type: object
+      required: [case_id, map_tracking_code]
+      properties:
+        case_id: { type: string, format: uuid }
+        map_tracking_code: { type: string }
+
+    UpdateClaimDetailsRequest:
+      type: object
+      properties:
+        claim_type: { type: string, enum: [ownership, easement, usufruct, benefits_ownership] }
+        ownership_type: { type: string, enum: [land, building, land_and_building] }
+        main_plate_number: { type: string }
+        sub_plate_number: { type: string }
+        plate_section: { type: string }
+        total_share: { type: integer }
+        partial_share: { type: integer }
+        has_government_rights: { type: boolean }
+        treasury_payment_ref: { type: string }
+        legal_advice_requested: { type: boolean }
+        legal_advice_method: { type: string, enum: [human, ai, both] }
+
+    AddClaimDocumentRequest:
+      type: object
+      required: [doc_type, file_id]
+      properties:
+        doc_type: { type: string }
+        file_id: { type: string, description: "شناسه فایل آپلودشده" }
+        description: { type: string }
+
+    ClaimDocumentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        doc_type: { type: string }
+        file_download_url: { type: string }
+        description: { type: string }
+        verified: { type: boolean }
+        verification_note: { type: string }
+
+    # --- Cert Service ---
+    CertServiceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        status: { type: string }
+        claim_tracking_code: { type: string }
+        action_reference: { type: string }
+        action_type: { type: string }
+        action_date: { type: string, format: date }
+        cert_image_url: { type: string }
+        cert_unique_id: { type: string }
+        tracking_code: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    CreateCertServiceRequest:
+      type: object
+      required: [case_id, claim_tracking_code]
+      properties:
+        case_id: { type: string, format: uuid }
+        claim_tracking_code: { type: string }
+        applicant_deceased: { type: boolean, default: false }
+        deceased_national_id: { type: string }
+        date_of_death: { type: string, format: date }
+
+    UpdateCertDetailsRequest:
+      type: object
+      properties:
+        action_reference: { type: string }
+        action_type: { type: string }
+        action_date: { type: string, format: date }
+        cert_image_id: { type: string }
+        cert_unique_id: { type: string }
+
+    # --- Payment ---
+    PaymentResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        service_type: { type: string }
+        amount: { type: integer, description: "مبلغ به ریال" }
+        payment_type: { type: string }
+        status: { type: string }
+        psp_reference: { type: string }
+        payment_url: { type: string, description: "URL درگاه پرداخت" }
+        created_at: { type: string, format: date-time }
+
+    CreatePaymentRequest:
+      type: object
+      required: [case_id, service_type, payment_type]
+      properties:
+        case_id: { type: string, format: uuid }
+        service_type: { type: string, enum: [map, claim, cert, legal_advice] }
+        payment_type: { type: string, enum: [advance, final_settlement] }
+
+    PaymentCallbackRequest:
+      type: object
+      properties:
+        psp_reference: { type: string }
+        status: { type: string, enum: [success, failed] }
+        token: { type: string }
+        amount: { type: integer }
+
+    # --- Expert Management ---
+    ExpertResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user: { $ref: '#/components/schemas/UserResponse' }
+        expert_type: { type: string }
+        license_number: { type: string }
+        in_approved_list: { type: boolean }
+        is_available: { type: boolean }
+        current_case_count: { type: integer }
+        max_active_cases: { type: integer }
+
+    AssignExpertRequest:
+      type: object
+      required: [case_id, expert_id]
+      properties:
+        case_id: { type: string, format: uuid }
+        expert_id: { type: string, format: uuid }
+
+    ExpertVerificationRequest:
+      type: object
+      required: [case_id, verified]
+      properties:
+        case_id: { type: string, format: uuid }
+        verified: { type: boolean }
+        note: { type: string }
+
+    # --- AI Advice ---
+    AiAdviceRequest:
+      type: object
+      required: [case_id, claim_service_id]
+      properties:
+        case_id: { type: string, format: uuid }
+        claim_service_id: { type: string, format: uuid }
+
+    AiAdviceResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        recommended_action: { type: string }
+        legal_references: { type: array, items: { type: string } }
+        confidence_score: { type: number }
+        disclaimer: { type: string, description: "هشدار: این یک نظر رسمی حقوقی نیست" }
+
+    # --- Audit Log ---
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        event_type: { type: string }
+        event_timestamp: { type: string, format: date-time }
+        actor_type: { type: string }
+        actor_id: { type: string, format: uuid }
+        resource_type: { type: string }
+        resource_id: { type: string, format: uuid }
+        changes: { type: object }
+        correlation_id: { type: string, format: uuid }
+
+    AuditLogResponse:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditLogEntry' } }
+        total: { type: integer }
+        page: { type: integer }
+        page_size: { type: integer }
+
+    # --- File Upload ---
+    FileUploadResponse:
+      type: object
+      properties:
+        file_id: { type: string, format: uuid }
+        file_name: { type: string }
+        file_size: { type: integer }
+        checksum_sha256: { type: string }
+        upload_url: { type: string, description: "Pre-signed PUT URL برای آپلود مستقیم به Object Storage" }
+        expires_in: { type: integer, example: 300 }
+
+    FileDownloadResponse:
+      type: object
+      properties:
+        file_id: { type: string, format: uuid }
+        file_name: { type: string }
+        download_url: { type: string, description: "Pre-signed GET URL با انقضا ۵ دقیقه" }
+        expires_in: { type: integer, example: 300 }
+
+    # --- Health ---
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [healthy, degraded, unhealthy] }
+        version: { type: string }
+        uptime_seconds: { type: integer }
+        checks:
+          type: object
+          properties:
+            database: { type: string }
+            redis: { type: string }
+            organization_api: { type: string }
+            sms_provider: { type: string }
+
+    # --- Pagination ---
+    PaginationParams:
+      type: object
+      properties:
+        page: { type: integer, minimum: 1, default: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        sort_by: { type: string }
+        sort_order: { type: string, enum: [asc, desc], default: desc }
+
+  # --------------------------------------------------------------------------
+  # Reusable Parameters
+  # --------------------------------------------------------------------------
+  parameters:
+    CaseId:
+      name: case_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    PaymentId:
+      name: payment_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+    FileId:
+      name: file_id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+# ============================================================================
+# PATHS
+# ============================================================================
+paths:
+
+  # --------------------------------------------------------------------------
+  # Health & System
+  # --------------------------------------------------------------------------
+  /health:
+    get:
+      tags: [System]
+      summary: سلامت سیستم
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/ready:
+    get:
+      tags: [System]
+      summary: آمادگی سرویس (Readiness Probe)
+      security: []
+      responses:
+        '200': { description: Ready }
+        '503': { description: Not Ready }
+
+  # ========================================================================
+  # AUTH
+  # ========================================================================
+  /auth/otp/send:
+    post:
+      tags: [Auth]
+      summary: ارسال کد OTP
+      description: |
+        ارسال رمز یکبارمصرف به شماره موبایل.
+        - purpose=auth: ورود/ثبت‌نام
+        - purpose=consent: رضایت برای ادامه فرآیند
+        - purpose=warning: هشدار قانونی + رضایت
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendOtpRequest'
+      responses:
+        '200':
+          description: OTP ارسال شد
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  expires_in: { type: integer, example: 120 }
+        '429':
+          description: Rate limit exceeded
+
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: تایید کد OTP
+      description: |
+        تایید OTP و دریافت JWT Token.
+        - اگر کاربر جدید باشد، ثبت‌نام خودکار انجام می‌شود (فقط با شماره موبایل).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyOtpRequest'
+      responses:
+        '200':
+          description: تایید موفق
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/TokenResponse'
+                  - type: object
+                    properties:
+                      user: { $ref: '#/components/schemas/UserResponse' }
+                      is_new_user: { type: boolean }
+        '400':
+          description: کد اشتباه یا منقضی شده
+        '423':
+          description: حساب قفل شده
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: دریافت توکن جدید با Refresh Token
+      description: |
+        Refresh Token Rotation: توکن قبلی باطل می‌شود و دو توکن جدید صادر می‌شود.
+        اگر توکن قبلاً استفاده شده باشد (reuse detection): کل خانواده باطل می‌شود.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: توکن‌های جدید
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: توکن نامعتبر یا قبلاً مصرف شده
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: خروج از سیستم
+      description: باطل کردن Refresh Token فعلی
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '204':
+          description: خروج موفق
+
+  /auth/register/complete:
+    post:
+      tags: [Auth]
+      summary: تکمیل ثبت‌نام (پس از OTP)
+      description: تکمیل اطلاعات هویتی پس از ثبت‌نام اولیه با OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterApplicantRequest'
+      responses:
+        '200':
+          description: ثبت‌نام کامل شد
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '422':
+          description: اطلاعات نامعتبر (کد ملی تکراری، سن زیر ۱۸ سال)
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: اطلاعات کاربر جاری
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/UserResponse'
+                  - type: object
+                    properties:
+                      expert_info: { $ref: '#/components/schemas/ExpertResponse' }
+
+  # ========================================================================
+  # PROFILE
+  # ========================================================================
+  /profile:
+    get:
+      tags: [Profile]
+      summary: دریافت پروفایل کامل
+      responses:
+        '200':
+          description: OK
+    patch:
+      tags: [Profile]
+      summary: به‌روزرسانی پروفایل
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+
+  /profile/verify-identity:
+    post:
+      tags: [Profile]
+      summary: احراز هویت کامل
+      description: |
+        استعلام هم‌زمان: ثنا + شاهکار (تطابق کد ملی-موبایل) + ثبت احوال (حیات).
+        نتیجه cache می‌شود.
+      responses:
+        '200':
+          description: نتیجه استعلام
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sana_status: { type: string }
+                  ncr_mobile_match: { type: boolean }
+                  is_alive: { type: boolean }
+                  age: { type: integer }
+                  errors: { type: array, items: { type: string } }
+
+  # ========================================================================
+  # CASES (پرونده‌ها)
+  # ========================================================================
+  /cases:
+    get:
+      tags: [Cases]
+      summary: لیست پرونده‌ها
+      description: |
+        - متقاضی: فقط پرونده‌های خودش
+        - کارشناس: پرونده‌های تخصیص‌یافته به خودش
+        - ادمین: همه پرونده‌ها
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: sort_by
+          in: query
+          schema: { type: string, enum: [created_at, updated_at, status], default: created_at }
+        - name: sort_order
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseListResponse'
+
+    post:
+      tags: [Cases]
+      summary: ایجاد پرونده جدید
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseRequest'
+      responses:
+        '201':
+          description: پرونده ایجاد شد
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaseResponse'
+        '422':
+          description: اطلاعات نامعتبر
+
+  /cases/{case_id}:
+    get:
+      tags: [Cases]
+      summary: جزئیات پرونده
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/CaseResponse'
+                  - type: object
+                    properties:
+                      map_service: { $ref: '#/components/schemas/MapServiceResponse' }
+                      claim_service: { $ref: '#/components/schemas/ClaimServiceResponse' }
+                      cert_service: { $ref: '#/components/schemas/CertServiceResponse' }
+        '404':
+          description: پرونده یافت نشد
+
+    patch:
+      tags: [Cases]
+      summary: به‌روزرسانی پرونده
+      description: فقط در وضعیت draft قابل ویرایش است.
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                province: { type: string }
+                city: { type: string }
+                district: { type: string }
+                village: { type: string }
+                postal_code: { type: string }
+                address_detail: { type: string }
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+        '409':
+          description: پرونده در وضعیت draft نیست
+
+  # --- Applicant Capacity (احراز نمایندگی) ---
+  /cases/{case_id}/capacity:
+    put:
+      tags: [Cases]
+      summary: ثبت سمت متقاضی و اطلاعات نمایندگی
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateApplicantCapacityRequest'
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+
+  /cases/{case_id}/capacity/verify-proxy-document:
+    post:
+      tags: [Cases]
+      summary: استعلام سند رسمی نمایندگی (رمز تصدیق)
+      description: استعلام آنلاین از سامانه اسناد رسمی/کانون سردفتران
+      parameters:
+        - $ref: '#/components/parameters/CaseId'
+      responses:
+        '200':
+          description: نتیجه استعلام
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  document_details: { type: object }
+
+  # ========================================================================
+  # MAP SERVICE (تهیه نقشه ثبتی)
+  # ========================================================================
+  /map-services:
+    post:
+      tags: [Map Service]
+      summary: شروع سرویس تهیه نقشه ثبتی
+      description: |
+        پرونده باید در وضعیت draft یا map_completed باشد.
+        پس از ایجاد، کارشناس حقوقی و نقشه‌بردار به‌صورت خودکار تخصیص می‌یابند
+        (round-robin بین کارشناسان available همان استان).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMapServiceRequest'
+      responses:
+        '201':
+          description: سرویس نقشه ایجاد شد
+        '409':
+          description: وضعیت پرونده مجاز نیست
+
+  /map-services/{map_service_id}:
+    get:
+      tags: [Map Service]
+      summary: جزئیات سرویس نقشه
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MapServiceResponse'
+                  - type: object
+                    properties:
+                      photos: { type: array, items: { $ref: '#/components/schemas/MapPhotoResponse' } }
+
+  # --- Consent (رضایت) ---
+  /map-services/{map_service_id}/consent:
+    post:
+      tags: [Map Service]
+      summary: درخواست رضایت (ارسال OTP)
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OTP ارسال شد
+
+  /map-services/{map_service_id}/consent/verify:
+    post:
+      tags: [Map Service]
+      summary: تایید رضایت
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp: { type: string }
+      responses:
+        '200':
+          description: رضایت ثبت شد — کارشناس می‌تواند عملیات میدانی را شروع کند
+
+  # --- Fieldwork (عملیات میدانی) ---
+  /map-services/{map_service_id}/fieldwork/start:
+    post:
+      tags: [Map Service]
+      summary: شروع عملیات میدانی (کارشناس نقشه‌بردار)
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: وضعیت به fieldwork_in_progress تغییر کرد
+
+  /map-services/{map_service_id}/fieldwork/submit:
+    post:
+      tags: [Map Service]
+      summary: ثبت نتیجه عملیات میدانی
+      description: |
+        ارسال نقشه + جدول توصیفی + ۴ عکس Geo-tagged.
+        اعتبارسنجی خودکار: تطبیق مختصات EXIF عکس‌ها با مختصات اعلامی ملک.
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitFieldworkRequest'
+      responses:
+        '200':
+          description: ثبت شد — آماده ارسال به سازمان
+        '422':
+          description: اعتبارسنجی Geo-tag ناموفق — خطا در تطبیق مختصات
+
+  # --- Submit to Organization ---
+  /map-services/{map_service_id}/submit:
+    post:
+      tags: [Map Service]
+      summary: ارسال نقشه به سازمان
+      description: |
+        ارسال از طریق مرکز تبادل اطلاعات ملی.
+        در صورت خطا: retry خودکار با backoff (۱،۲،۴،۸،۱۶ ثانیه).
+        در صورت شکست نهایی: وضعیت rejected + اطلاع به ادمین.
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: پذیرفته شد — در صف ارسال
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "queued" }
+                  estimated_response: { type: string }
+
+  /map-services/{map_service_id}/org-callback:
+    post:
+      tags: [Map Service]
+      summary: Callback از سازمان (webhook)
+      description: |
+        دریافت پاسخ خودکار از سازمان (تایید/رد).
+        فقط از IPهای مجاز سازمان پذیرفته می‌شود.
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: map_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_code: { type: string }
+                status: { type: string, enum: [approved, rejected] }
+                rejection_reason: { type: string }
+      responses:
+        '200':
+          description: دریافت شد
+        '403':
+          description: IP غیرمجاز
+
+  # ========================================================================
+  # CLAIM SERVICE (درج ادعا)
+  # ========================================================================
+  /claim-services:
+    post:
+      tags: [Claim Service]
+      summary: شروع سرویس درج ادعا
+      description: |
+        پرونده باید در وضعیت map_completed باشد.
+        کد رهگیری نقشه اعتبارسنجی می‌شود (وجود + دسترسی).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClaimServiceRequest'
+      responses:
+        '201':
+          description: سرویس ادعا ایجاد شد
+        '422':
+          description: کد رهگیری نقشه نامعتبر یا پرونده در وضعیت مجاز نیست
+
+  /claim-services/{claim_service_id}:
+    get:
+      tags: [Claim Service]
+      summary: جزئیات سرویس ادعا
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimServiceResponse'
+
+    patch:
+      tags: [Claim Service]
+      summary: به‌روزرسانی جزئیات ادعا
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClaimDetailsRequest'
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+
+  # --- Consent + Warning (رضایت + هشدار قانونی) ---
+  /claim-services/{claim_service_id}/consent:
+    post:
+      tags: [Claim Service]
+      summary: درخواست رضایت — شامل پیامک هشدار ادعای واهی
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OTP + پیامک هشدار ارسال شد
+
+  /claim-services/{claim_service_id}/consent/verify:
+    post:
+      tags: [Claim Service]
+      summary: تایید رضایت (پس از دریافت هشدار)
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp: { type: string }
+      responses:
+        '200':
+          description: رضایت ثبت شد
+
+  # --- Documents (مستندات) ---
+  /claim-services/{claim_service_id}/documents:
+    get:
+      tags: [Claim Service]
+      summary: لیست مستندات ادعا
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents: { type: array, items: { $ref: '#/components/schemas/ClaimDocumentResponse' } }
+
+    post:
+      tags: [Claim Service]
+      summary: افزودن مستند
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddClaimDocumentRequest'
+      responses:
+        '201':
+          description: مستند اضافه شد
+
+  /claim-services/{claim_service_id}/documents/{document_id}:
+    delete:
+      tags: [Claim Service]
+      summary: حذف مستند
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: document_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204':
+          description: حذف شد
+
+  # --- Document Verification (تایید کارشناس) ---
+  /claim-services/{claim_service_id}/documents/verify:
+    post:
+      tags: [Claim Service]
+      summary: تایید/رد مستندات توسط کارشناس حقوقی
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [document_id, verified]
+              properties:
+                document_id: { type: string, format: uuid }
+                verified: { type: boolean }
+                note: { type: string }
+      responses:
+        '200':
+          description: ثبت شد
+
+  # --- Submit to Organization ---
+  /claim-services/{claim_service_id}/submit:
+    post:
+      tags: [Claim Service]
+      summary: ارسال ادعا به سازمان
+      description: |
+        کنترل خودکار: تمام مستندات باید verified باشند.
+        در صورت حقوق دولتی: شماره واریز به خزانه الزامی است.
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: پذیرفته شد
+
+  /claim-services/{claim_service_id}/org-callback:
+    post:
+      tags: [Claim Service]
+      summary: Callback از سازمان
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_code: { type: string }
+                status: { type: string, enum: [approved, rejected] }
+                rejection_reason: { type: string }
+      responses:
+        '200': { description: دریافت شد }
+
+  # --- AI Legal Advice (راهنمایی هوشمند) ---
+  /claim-services/{claim_service_id}/ai-advice:
+    post:
+      tags: [Claim Service]
+      summary: درخواست راهنمایی حقوقی مبتنی بر AI
+      description: |
+        **هشدار:** این یک نظر رسمی حقوقی نیست و صرفاً برای راهنمایی نوع اقدام قانونی است.
+        خروجی شامل ارجاع به مواد قانونی مرتبط و گزینه ارجاع به کارشناس انسانی است.
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiAdviceRequest'
+      responses:
+        '200':
+          description: راهنمایی آماده است
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiAdviceResponse'
+
+  /claim-services/{claim_service_id}/ai-advice/feedback:
+    post:
+      tags: [Claim Service]
+      summary: بازخورد راهنمایی AI
+      parameters:
+        - name: claim_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                advice_id: { type: string, format: uuid }
+                was_helpful: { type: boolean }
+                escalated_to_human: { type: boolean }
+      responses:
+        '200':
+          description: بازخورد ثبت شد
+
+  # ========================================================================
+  # CERT SERVICE (درج گواهی اقدام)
+  # ========================================================================
+  /cert-services:
+    post:
+      tags: [Cert Service]
+      summary: شروع سرویس درج گواهی اقدام
+      description: |
+        - پرونده باید در وضعیت claim_completed باشد.
+        - کد رهگیری ادعا باید معتبر باشد و بیش از ۲ سال از تاریخ آن نگذشته باشد.
+        - در صورت فوت متقاضی: اطلاعات متوفی الزامی است.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCertServiceRequest'
+      responses:
+        '201':
+          description: سرویس گواهی ایجاد شد
+        '422':
+          description: مهلت ۲ ساله گذشته یا کد رهگیری نامعتبر
+
+  /cert-services/{cert_service_id}:
+    get:
+      tags: [Cert Service]
+      summary: جزئیات سرویس گواهی
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertServiceResponse'
+
+    patch:
+      tags: [Cert Service]
+      summary: به‌روزرسانی جزئیات گواهی اقدام
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCertDetailsRequest'
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+
+  # --- Consent ---
+  /cert-services/{cert_service_id}/consent:
+    post:
+      tags: [Cert Service]
+      summary: درخواست رضایت
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OTP ارسال شد
+
+  /cert-services/{cert_service_id}/consent/verify:
+    post:
+      tags: [Cert Service]
+      summary: تایید رضایت
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [otp]
+              properties:
+                otp: { type: string }
+      responses:
+        '200':
+          description: رضایت ثبت شد
+
+  # --- Submit ---
+  /cert-services/{cert_service_id}/submit:
+    post:
+      tags: [Cert Service]
+      summary: ارسال گواهی اقدام به سازمان
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '202':
+          description: پذیرفته شد
+
+  /cert-services/{cert_service_id}/org-callback:
+    post:
+      tags: [Cert Service]
+      summary: Callback از سازمان (کد رهگیری نهایی)
+      security:
+        - ApiKeyAuth: []
+      parameters:
+        - name: cert_service_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tracking_code: { type: string }
+                status: { type: string, enum: [approved, rejected] }
+                rejection_reason: { type: string }
+      responses:
+        '200': { description: دریافت شد }
+
+  # ========================================================================
+  # FILES (آپلود/دانلود)
+  # ========================================================================
+  /files/upload-url:
+    post:
+      tags: [Files]
+      summary: دریافت URL آپلود
+      description: |
+        دریافت Pre-signed PUT URL برای آپلود مستقیم فایل به Object Storage.
+        انواع مجاز: PDF, JPG, PNG, DXF, DWG, GeoJSON (حداکثر ۵۰MB).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [file_name, content_type, file_size]
+              properties:
+                file_name: { type: string }
+                content_type: { type: string }
+                file_size: { type: integer }
+                purpose: { type: string, enum: [map, photo_north, photo_south, photo_east, photo_west, claim_document, cert_image, proxy_document, identity] }
+      responses:
+        '200':
+          description: URL آماده است
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileUploadResponse'
+
+  /files/{file_id}/download-url:
+    get:
+      tags: [Files]
+      summary: دریافت URL دانلود
+      description: Pre-signed GET URL با انقضا ۵ دقیقه
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileDownloadResponse'
+
+  /files/{file_id}:
+    delete:
+      tags: [Files]
+      summary: حذف فایل
+      parameters:
+        - $ref: '#/components/parameters/FileId'
+      responses:
+        '204':
+          description: حذف شد
+
+  # ========================================================================
+  # PAYMENTS
+  # ========================================================================
+  /payments:
+    post:
+      tags: [Payments]
+      summary: ایجاد درخواست پرداخت
+      description: |
+        محاسبه خودکار مبلغ بر اساس تعرفه فعال.
+        دریافت URL درگاه پرداخت.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePaymentRequest'
+      responses:
+        '201':
+          description: درخواست ایجاد شد — کاربر به درگاه هدایت شود
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+
+  /payments/{payment_id}:
+    get:
+      tags: [Payments]
+      summary: وضعیت پرداخت
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentResponse'
+
+  /payments/callback:
+    post:
+      tags: [Payments]
+      summary: Callback از درگاه پرداخت
+      description: فقط از IPهای مجاز PSP پذیرفته می‌شود.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentCallbackRequest'
+      responses:
+        '200':
+          description: دریافت شد
+
+  /payments/{payment_id}/refund:
+    post:
+      tags: [Payments]
+      summary: درخواست استرداد
+      description: فقط ادمین. استرداد خودکار هزینه (به‌جز هزینه بررسی اسناد نمایندگی).
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, description: "مبلغ به ریال — اگر خالی: استرداد کامل" }
+                reason: { type: string }
+      responses:
+        '200':
+          description: درخواست استرداد ثبت شد
+
+  # ========================================================================
+  # TARIFFS (تعرفه‌ها)
+  # ========================================================================
+  /tariffs:
+    get:
+      tags: [Tariffs]
+      summary: لیست تعرفه‌های فعال
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tariffs: { type: array, items: { $ref: '#/components/schemas/TariffResponse' } }
+
+  /tariffs/admin:
+    get:
+      tags: [Tariffs]
+      summary: مدیریت تعرفه‌ها (ادمین)
+      description: شامل تاریخچه نسخه‌ها
+      responses:
+        '200':
+          description: OK
+
+    post:
+      tags: [Tariffs]
+      summary: ایجاد تعرفه جدید (ادمین)
+      description: نسخه قبلی همان service_type غیرفعال می‌شود.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [service_type, max_amount, effective_from, version]
+              properties:
+                service_type: { type: string, enum: [map, claim, cert, legal_advice] }
+                max_amount: { type: integer }
+                non_refundable: { type: integer }
+                effective_from: { type: string, format: date }
+                version: { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          description: تعرفه جدید ایجاد شد
+
+  TariffResponse:
+    type: object
+    properties:
+      service_type: { type: string }
+      max_amount: { type: integer }
+      non_refundable: { type: integer }
+      effective_from: { type: string, format: date }
+      version: { type: string }
+
+  # ========================================================================
+  # EXPERTS (مدیریت کارشناسان — ادمین)
+  # ========================================================================
+  /experts:
+    get:
+      tags: [Experts]
+      summary: لیست کارشناسان
+      parameters:
+        - name: expert_type
+          in: query
+          schema: { type: string, enum: [legal, survey] }
+        - name: is_available
+          in: query
+          schema: { type: boolean }
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: page_size
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ExpertResponse' } }
+                  total: { type: integer }
+
+    post:
+      tags: [Experts]
+      summary: ثبت کارشناس جدید (ادمین)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [national_id, first_name, last_name, mobile, expert_type, license_number]
+              properties:
+                national_id: { type: string }
+                first_name: { type: string }
+                last_name: { type: string }
+                mobile: { type: string }
+                expert_type: { type: string, enum: [legal, survey] }
+                license_number: { type: string }
+                license_expiry: { type: string, format: date }
+                organization: { type: string }
+                education_level: { type: string }
+                field_of_study: { type: string }
+                years_of_experience: { type: integer }
+                max_active_cases: { type: integer }
+                in_approved_list: { type: boolean }
+                approved_list_ref: { type: string }
+      responses:
+        '201':
+          description: کارشناس ثبت شد
+
+  /experts/{expert_id}:
+    get:
+      tags: [Experts]
+      summary: جزئیات کارشناس
+      parameters:
+        - name: expert_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpertResponse'
+
+    patch:
+      tags: [Experts]
+      summary: به‌روزرسانی کارشناس (ادمین)
+      parameters:
+        - name: expert_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                license_number: { type: string }
+                license_expiry: { type: string, format: date }
+                is_available: { type: boolean }
+                max_active_cases: { type: integer }
+                in_approved_list: { type: boolean }
+                approved_list_ref: { type: string }
+      responses:
+        '200':
+          description: به‌روزرسانی شد
+
+  /experts/{expert_id}/deactivate:
+    post:
+      tags: [Experts]
+      summary: غیرفعال‌سازی کارشناس
+      parameters:
+        - name: expert_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: غیرفعال شد
+
+  # --- Case Assignment ---
+  /experts/assign:
+    post:
+      tags: [Experts]
+      summary: تخصیص کارشناس به پرونده (ادمین)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignExpertRequest'
+      responses:
+        '200':
+          description: تخصیص یافت
+
+  # --- Verification (تایید نمایندگی) ---
+  /experts/verify-capacity:
+    post:
+      tags: [Experts]
+      summary: تایید/رد احراز نمایندگی توسط کارشناس حقوقی
+      description: فقط کارشناس حقوقی تخصیص‌یافته به پرونده می‌تواند این کار را انجام دهد.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExpertVerificationRequest'
+      responses:
+        '200':
+          description: ثبت شد
+        '403':
+          description: دسترسی غیرمجاز (کارشناس این پرونده نیستید)
+
+  # ========================================================================
+  # AUDIT LOG (ممیزی — ادمین/حسابرس)
+  # ========================================================================
+  /audit-logs:
+    get:
+      tags: [Audit]
+      summary: جستجو در لاگ ممیزی
+      description: فقط ادمین و حسابرس
+      parameters:
+        - name: case_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: event_type
+          in: query
+          schema: { type: string }
+        - name: actor_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: from_date
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to_date
+          in: query
+          schema: { type: string, format: date-time }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogResponse'
+
+  /audit-logs/export:
+    get:
+      tags: [Audit]
+      summary: خروجی لاگ (CSV/JSON)
+      description: |
+        export مخصوص تحویل به سازمان.
+        فیلتر بر اساس بازه زمانی + نوع رویداد.
+      parameters:
+        - name: from_date
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to_date
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: format
+          in: query
+          schema: { type: string, enum: [csv, json], default: json }
+      responses:
+        '200':
+          description: فایل خروجی
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_url: { type: string }
+
+  # ========================================================================
+  # NOTIFICATIONS (اطلاع‌رسانی)
+  # ========================================================================
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: لیست اطلاع‌رسانی‌های کاربر
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: unread_only
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        channel: { type: string }
+                        content: { type: string }
+                        status: { type: string }
+                        read_at: { type: string, format: date-time, nullable: true }
+                        created_at: { type: string, format: date-time }
+                  total: { type: integer }
+                  unread_count: { type: integer }
+
+  /notifications/{notification_id}/read:
+    post:
+      tags: [Notifications]
+      summary: علامت‌گذاری به‌عنوان خوانده‌شده
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: علامت‌گذاری شد
+
+  /notifications/read-all:
+    post:
+      tags: [Notifications]
+      summary: علامت‌گذاری همه به‌عنوان خوانده‌شده
+      responses:
+        '200':
+          description: انجام شد
+
+  # ========================================================================
+  # INTEGRATION JOBS (مدیریت درخواست‌های ناموفق — ادمین)
+  # ========================================================================
+  /integration/failed-requests:
+    get:
+      tags: [Integration]
+      summary: لیست درخواست‌های ناموفق به سازمان
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: OK
+
+  /integration/failed-requests/{log_id}/retry:
+    post:
+      tags: [Integration]
+      summary: تلاش مجدد دستی (ادمین)
+      parameters:
+        - name: log_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: درخواست مجدد ارسال شد
+
+  # ========================================================================
+  # DASHBOARD (داشبورد — ادمین)
+  # ========================================================================
+  /dashboard/stats:
+    get:
+      tags: [Dashboard]
+      summary: آمار کلی
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_cases: { type: integer }
+                  cases_by_status: { type: object }
+                  active_experts: { type: integer }
+                  pending_assignments: { type: integer }
+                  org_success_rate: { type: number }
+                  avg_completion_days: { type: number }
+                  revenue_today: { type: integer }
+                  revenue_this_month: { type: integer }

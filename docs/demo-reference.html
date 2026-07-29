@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>سامانه کارگزاری ماده ۱۰ — نسخهٔ کامل و دقیق</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#101B33; --navy-2:#1C2E52; --brass:#AD8A3C; --brass-light:#D9BE7E;
+    --paper:#FAFAF9; --card:#FFFFFF; --ink:#1C1F26; --ink-soft:#5A6270;
+    --line:#E6E3DA; --green:#2F6F4E; --green-bg:#EAF3EE; --red:#A23B2E; --red-bg:#FBEEEC;
+    --locked:#C7CCD6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Vazirmatn',sans-serif; background:var(--paper); color:var(--ink);}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  header.topbar{background:var(--navy); color:#fff; padding:20px 28px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;}
+  header.topbar .title{font-size:19px; font-weight:800;}
+  header.topbar .subtitle{font-size:12.5px; color:#B9C2D6; margin-top:4px;}
+  header.topbar .badge{background:rgba(173,138,60,0.18); border:1px solid var(--brass); color:var(--brass-light); font-size:12px; padding:5px 12px; border-radius:999px; font-weight:600;}
+
+  .wrap{max-width:900px; margin:0 auto; padding:24px 18px 60px;}
+
+  .ledger{display:flex; gap:12px; margin-bottom:22px;}
+  .stagecard{flex:1; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 14px 12px; cursor:pointer; min-width:0;}
+  .stagecard.locked{cursor:not-allowed; background:#F2F1EC;}
+  .stagecard.active{border-color:var(--navy-2); box-shadow:0 6px 18px rgba(16,27,51,0.12);}
+  .stagecard .num{font-size:10.5px; font-weight:700; color:var(--ink-soft);}
+  .stagecard.locked .num{color:var(--locked);}
+  .stagecard .name{font-size:14.5px; font-weight:700; margin-top:4px; color:var(--navy);}
+  .stagecard.locked .name{color:#9AA0AC;}
+  .stagecard .status{margin-top:8px; font-size:11.5px; display:flex; align-items:center; gap:6px;}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--locked); flex-shrink:0;}
+  .dot.done{background:var(--green);} .dot.now{background:var(--brass);}
+  .stagecard .code{margin-top:5px; font-size:11px; color:var(--green); font-weight:600; direction:ltr; text-align:right;}
+  .arrow-between{align-self:center; color:var(--ink-soft); font-size:16px; padding-top:18px;}
+
+  .panel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:30px;}
+  .panel h2{margin:0 0 3px; font-size:18px; color:var(--navy);}
+  .panel .lead{font-size:13px; color:var(--ink-soft); margin-bottom:22px;}
+
+  .stepdots{display:flex; gap:5px; margin-bottom:22px; flex-wrap:wrap;}
+  .stepdots span{font-size:10.5px; padding:4px 10px; border-radius:999px; background:#F0EFEA; color:var(--ink-soft); font-weight:600;}
+  .stepdots span.active{background:var(--navy); color:#fff;}
+  .stepdots span.checked{background:var(--green-bg); color:var(--green);}
+
+  .field{margin-bottom:16px;}
+  .field label{display:block; font-size:12.8px; font-weight:600; margin-bottom:5px; color:var(--ink);}
+  .field .ref{font-size:11px; color:var(--brass); font-weight:600; margin-right:5px;}
+  .field .hint{display:block; font-size:11px; color:var(--ink-soft); font-weight:400; margin-top:3px;}
+  .field input[type=text], .field input[type=number], .field input[type=date], .field select, .field textarea{
+    width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; font-size:13.5px; background:#FCFCFB; color:var(--ink);
+  }
+  .field textarea{min-height:64px; resize:vertical;}
+  .field input:focus, .field select:focus, .field textarea:focus{outline:none; border-color:var(--navy-2); background:#fff;}
+  .field input[readonly]{background:#F2F1EC; color:var(--ink-soft); direction:ltr; text-align:right;}
+  .field.err input, .field.err select, .field.err textarea{border-color:var(--red);}
+  .field .errmsg{font-size:11px; color:var(--red); margin-top:4px;}
+  .checkrow{display:flex; align-items:center; gap:8px; padding:9px 0;}
+  .checkrow input[type=checkbox]{width:16px; height:16px;}
+  .checkrow label{font-size:13px; font-weight:600; margin:0;}
+  .filebtn{display:inline-flex; align-items:center; gap:8px; padding:9px 16px; border:1px dashed var(--line); border-radius:8px; background:#FCFCFB; cursor:pointer; font-size:13px; color:var(--ink-soft); font-weight:600;}
+  .filebtn.done{border-style:solid; border-color:var(--green); color:var(--green); background:var(--green-bg);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:0 16px;}
+  @media (max-width:640px){.grid2{grid-template-columns:1fr;} .ledger{flex-direction:column;} .arrow-between{display:none;}}
+
+  .warn-box{background:#FBF2E7; border:1px solid #E8CFA0; color:#7A5A17; font-size:12px; padding:11px 13px; border-radius:8px; margin-bottom:18px; line-height:1.85;}
+  .info-box{background:#EEF2F6; border:1px solid #CFD9E4; color:#33465A; font-size:12px; padding:11px 13px; border-radius:8px; margin-bottom:18px; line-height:1.85;}
+
+  .repeat-item{border:1px solid var(--line); border-radius:9px; padding:14px; margin-bottom:10px; background:#FCFCFB; position:relative;}
+  .repeat-item .rm{position:absolute; left:10px; top:10px; font-size:11px; color:var(--red); cursor:pointer; font-weight:700;}
+  .add-btn{font-size:12.5px; font-weight:700; color:var(--navy-2); background:none; border:1px dashed var(--navy-2); padding:8px 14px; border-radius:8px; cursor:pointer;}
+
+  .actions{display:flex; justify-content:space-between; margin-top:26px;}
+  button{font-family:inherit; font-size:13.5px; font-weight:700; padding:10px 24px; border-radius:8px; border:none; cursor:pointer;}
+  .btn-primary{background:var(--navy); color:#fff;}
+  .btn-primary:disabled{background:#C7CCD6; cursor:not-allowed;}
+  .btn-ghost{background:transparent; color:var(--ink-soft); border:1px solid var(--line);}
+
+  .stamp-screen{text-align:center; padding:16px 0 6px;}
+  .stamp{width:140px; height:140px; margin:0 auto 20px; border-radius:50%; border:3.5px solid var(--brass); display:flex; align-items:center; justify-content:center; color:var(--brass); transform:scale(0.4) rotate(-18deg); opacity:0; animation:stampIn .5s cubic-bezier(.2,1.4,.5,1) forwards;}
+  @keyframes stampIn{to{transform:scale(1) rotate(-8deg); opacity:1;}}
+  .stamp .inner-ring{width:112px; height:112px; border-radius:50%; border:1.5px solid var(--brass); display:flex; align-items:center; justify-content:center; flex-direction:column;}
+  .stamp .seal-title{font-size:10.5px; font-weight:700;} .stamp .seal-sub{font-size:8.5px; margin-top:3px; color:var(--brass-light);}
+  .track-code{font-size:21px; font-weight:700; color:var(--navy); direction:ltr; margin-bottom:5px;}
+  .track-label{font-size:12px; color:var(--ink-soft); margin-bottom:16px;}
+  .rejected-box{text-align:center; padding:30px 10px;}
+  .rejected-box .x{font-size:40px; color:var(--red); margin-bottom:10px;}
+
+  footer.note{max-width:900px; margin:0 auto 40px; padding:0 18px; font-size:11px; color:var(--ink-soft); line-height:2;}
+  footer.note b{color:var(--ink);}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <div class="title">سامانه کارگزاری ماده ۱۰ — نسخهٔ کامل و دقیق فرم‌ها</div>
+    <div class="subtitle">تمام فیلدها و شاخه‌های شرطی سه سند، مطابق منطق پیاده‌سازی‌شده در بک‌اند</div>
+  </div>
+  <div class="badge">دموی جلویی · مستقل از بک‌اند واقعی</div>
+</header>
+
+<div class="wrap">
+  <div class="ledger" id="ledger"></div>
+  <div class="panel" id="panel"></div>
+</div>
+
+<footer class="note">
+  <b>دربارهٔ این نسخه:</b> این دمو اکنون تمام فیلدهای اجباری/اختیاری و شاخه‌های شرطی هر سه سند (نمایندگی حقیقی/حقوقی، فوت مدعی، سهم مالکیت، دسترسی اشخاص ثالث، مستندات چندگانه و...) را پیاده می‌کند.
+  منطق اعتبارسنجی دقیقاً با بک‌اند Python/Flask ارائه‌شده هم‌راستاست، اما این صفحه مستقل و کاملاً سمت مرورگر اجرا می‌شود (بدون فراخوانی واقعی API) چون بک‌اند برای اجرا نیاز به میزبانی جداگانه دارد.
+</footer>
+
+<script>
+/* =========================================================
+   موتور فرم شرطی — تعاریف فیلد
+   ========================================================= */
+function F(key,label,type,opts={}){ return {key,label,type,...opts}; }
+const text = (k,l,o={}) => F(k,l,'text',o);
+const num = (k,l,o={}) => F(k,l,'number',o);
+const dateF = (k,l,o={}) => F(k,l,'date',o);
+const sel = (k,l,options,o={}) => F(k,l,'select',{options,...o});
+const chk = (k,l,o={}) => F(k,l,'checkbox',o);
+const ta = (k,l,o={}) => F(k,l,'textarea',o);
+const file = (k,l,o={}) => F(k,l,'file',o);
+const repeat = (k,l,subFields,o={}) => F(k,l,'repeat',{subFields,...o});
+
+const ROLE_OPTS = [
+  {v:'principal', l:'اصیل'},
+  {v:'rep_natural', l:'نمایندهٔ قانونی شخص حقیقی'},
+  {v:'rep_legal', l:'نمایندهٔ قانونی شخص حقوقی'},
+];
+const SENA_OPTS = [{v:'registered',l:'ثبت‌نام کرده‌ام'},{v:'not_registered',l:'ثبت‌نام نکرده‌ام'}];
+const REP_METHOD_OPTS = [{v:'document_upload',l:'بارگذاری سند رسمی نمایندگی'},{v:'legal_entity_db_inquiry',l:'استعلام از پایگاه اشخاص حقوقی'}];
+const YESNO_OPTS = [{v:'1',l:'بلی'},{v:'0',l:'خیر'}];
+
+/* بلوک تکرارشونده نمایندگی — با ماده مرجع دقیق هر بخش */
+function representativeScreen(idPrefix){
+  return {
+    id: idPrefix+'_rep',
+    title: 'احراز سمت و نمایندگی',
+    visibleIf: d => d.applicant_role === 'rep_natural' || d.applicant_role === 'rep_legal',
+    fields: [
+      sel('rep_verification_method','نحوهٔ احراز نمایندگی', REP_METHOD_OPTS, {ref:'ماده ۸', required:true,
+        visibleIf: d => d.applicant_role === 'rep_legal'}),
+      text('legal_person_national_id','شناسهٔ ملی شخص حقوقی', {ref:'ماده ۸', required:true,
+        visibleIf: d => d.applicant_role === 'rep_legal'}),
+      text('principal_national_code','کد ملی اصیل', {ref:'ماده ۱۰', required:true,
+        visibleIf: d => d.applicant_role === 'rep_natural'}),
+      chk('principal_alive','اصیل در قید حیات است', {ref:'ماده ۱۰', required:true,
+        visibleIf: d => d.applicant_role === 'rep_natural'}),
+      file('rep_doc_image_ref','تصویر سند رسمی نمایندگی', {ref:'ماده ۹/۱۰', required:true,
+        visibleIf: d => (d.applicant_role === 'rep_legal' && d.rep_verification_method === 'document_upload') || d.applicant_role === 'rep_natural'}),
+      dateF('rep_doc_date','تاریخ تنظیم سند نمایندگی', {ref:'ماده ۹/۱۰', required:true,
+        visibleIf: d => (d.applicant_role === 'rep_legal' && d.rep_verification_method === 'document_upload') || d.applicant_role === 'rep_natural'}),
+      text('rep_doc_official_id','شناسهٔ سند رسمی نمایندگی (اختیاری)', {ref:'ماده ۹/۱۰',
+        visibleIf: d => (d.applicant_role === 'rep_legal' && d.rep_verification_method === 'document_upload') || d.applicant_role === 'rep_natural'}),
+      text('rep_doc_verification_code','رمز تصدیق سند (اختیاری)', {ref:'ماده ۹/۱۰',
+        visibleIf: d => (d.applicant_role === 'rep_legal' && d.rep_verification_method === 'document_upload') || d.applicant_role === 'rep_natural'}),
+    ]
+  };
+}
+
+function expertRegistryScreen(note){
+  return {
+    id:'expert_registry', title:'تخصیص کارشناس امور ثبتی و حقوقی', note,
+    fields:[
+      text('registry_expert_national_code','کد ملی کارشناس امور ثبتی و حقوقی', {ref:'ماده مربوطه', required:true, hint:'باید در فهرست کارشناسان مجاز موضوع مادهٔ ۴ دستورالعمل باشد'}),
+      sel('registry_expert_opinion','نظر کارشناس دربارهٔ احراز نمایندگی', [{v:'verified',l:'نمایندگی احراز شد'},{v:'not_verified',l:'نمایندگی احراز نشد'}], {required:true}),
+      ta('registry_expert_notes','توضیحات کارشناس (اختیاری)'),
+    ]
+  };
+}
+
+function otpScreen(id, opts={}){
+  return { id, kind:'otp', title: opts.title || 'رضایت و تایید نهایی', warn: opts.warn, requireAck: opts.requireAck };
+}
+
+function resultScreen(id, opts){
+  return { id, kind:'result', title: opts.title, label: opts.label, prefix: opts.prefix, extra: opts.extra };
+}
+
+/* =========================================================
+   سرویس ۱ — تهیه نقشه ثبتی
+   ========================================================= */
+const MAP_SCREENS = [
+  {
+    id:'identity', title:'هویت و سمت متقاضی', note:'ماده ۶',
+    fields:[
+      text('applicant_national_code','کد ملی متقاضی', {required:true}),
+      text('applicant_phone','شمارهٔ تلفن همراه متقاضی', {required:true, hint:'باید در سامانهٔ شاهکار به‌نام متقاضی ثبت باشد'}),
+      chk('applicant_18_and_alive','متقاضی بالای ۱۸ سال و در قید حیات است', {required:true}),
+      sel('sena_status','وضعیت ثبت‌نام در سامانهٔ ثنا', SENA_OPTS, {required:true}),
+      sel('applicant_role','سمت متقاضی', ROLE_OPTS, {required:true}),
+    ]
+  },
+  representativeScreen('map'),
+  {
+    id:'location_property', title:'موقعیت مکانی و مشخصات ملک', note:'ماده ۶',
+    fields:[
+      text('province','استان', {required:true}),
+      text('county','شهرستان', {required:true}),
+      text('city_or_village','شهر/روستا', {required:true}),
+      num('geo_lat','عرض جغرافیایی ملک', {required:true}),
+      num('geo_lng','طول جغرافیایی ملک', {required:true}),
+      text('address','نشانی دقیق ملک', {required:true}),
+      text('postal_code','کدپستی (اختیاری)'),
+      sel('property_type','نوع ملک', [{v:'land',l:'زمین'},{v:'apartment',l:'آپارتمان'},{v:'villa',l:'ویلایی'}], {required:true}),
+      num('property_area_approx','مساحت تقریبی ملک (مترمربع)', {required:true}),
+      sel('property_usage','کاربری ملک', [{v:'residential',l:'مسکونی'},{v:'commercial',l:'تجاری'},{v:'administrative',l:'اداری'},{v:'agricultural',l:'کشاورزی'}], {required:true}),
+      sel('ownership_type','نوع مالکیت', [{v:'area',l:'عرصه'},{v:'structure',l:'اعیان'},{v:'area_and_structure',l:'عرصه و اعیان'}], {required:true}),
+      chk('has_structures','ملک دارای اعیانی است'),
+      num('annex_count','تعداد منضمات (پارکینگ، انباری و...)'),
+      chk('grant_third_party_access','درخواست اعطای دسترسی اشخاص دیگر به این نقشه را دارم', {ref:'ماده ۶/۷'}),
+      repeat('third_party_codes','فهرست کد ملی/شناسهٔ ملی اشخاص مجاز به دسترسی', [text('code','کد ملی یا شناسهٔ ملی')], {ref:'ماده ۷', visibleIf: d => d.grant_third_party_access, addLabel:'افزودن شخص'}),
+    ]
+  },
+  expertRegistryScreen('ماده ۱۲ — همچنین کارشناس نقشه‌بردار در ادامه تخصیص می‌یابد (ماده ۱۳)'),
+  {
+    id:'surveyor_assignment', title:'تخصیص کارشناس نقشه‌بردار', note:'ماده ۱۳',
+    fields:[ text('surveyor_expert_national_code','کد ملی کارشناس نقشه‌بردار', {required:true, hint:'باید در فهرست کارشناسان مجاز موضوع مادهٔ ۵ دستورالعمل باشد و کد ملی‌اش در سامانهٔ مانا ثبت شده باشد'}) ]
+  },
+  otpScreen('consent', {title:'رضایت با رمز یکبارمصرف'}),
+  {
+    id:'survey', title:'نقشه‌برداری میدانی', note:'ماده ۱۶/۱۷',
+    fields:[
+      chk('survey_visited_in_person','حضور شخصی کارشناس نقشه‌بردار در محل احراز شد', {required:true, ref:'تبصرهٔ ماده ۱۶'}),
+      file('photo_1','عکس ضلع اول ملک (Geo-tag)', {required:true}),
+      file('photo_2','عکس ضلع دوم ملک (Geo-tag)', {required:true}),
+      file('photo_3','عکس ضلع سوم ملک (Geo-tag)', {required:true}),
+      file('photo_4','عکس ضلع چهارم ملک (Geo-tag)', {required:true}),
+      file('survey_map_file_ref','فایل نقشهٔ ترسیم‌شده (AutoCAD/WebGIS)', {required:true}),
+      ta('survey_descriptive_table_json','جدول اطلاعات توصیفی ملک (فرمت سامانهٔ مانا)', {required:true}),
+      chk('applicant_approved_map','نقشه مورد تایید متقاضی قرار گرفت', {required:true, ref:'ماده ۱۷'}),
+    ]
+  },
+  resultScreen('final', {title:'صدور کد رهگیری نقشه', label:'کد رهگیری نقشهٔ ثبتی', prefix:'MAP'}),
+];
+
+/* =========================================================
+   سرویس ۲ — درج ادعا
+   ========================================================= */
+const CLAIM_SCREENS = [
+  {
+    id:'identity', title:'هویت و سمت متقاضی', note:'ماده ۶',
+    fields:[
+      text('applicant_national_code','کد ملی متقاضی', {required:true}),
+      text('applicant_phone','شمارهٔ تلفن همراه متقاضی', {required:true}),
+      chk('applicant_18_and_alive','متقاضی بالای ۱۸ سال و در قید حیات است', {required:true}),
+      sel('sena_status','وضعیت ثبت‌نام در سامانهٔ ثنا', SENA_OPTS, {required:true}),
+      sel('applicant_role','سمت متقاضی', ROLE_OPTS, {required:true}),
+    ]
+  },
+  representativeScreen('claim'),
+  {
+    id:'map_ref', title:'اطلاع از تبصرهٔ ۵ و کد رهگیری نقشه', note:'ماده ۶',
+    fields:[
+      chk('tabsare5_acknowledged','از مفاد تبصرهٔ ۵ مادهٔ ۱۰ قانون (تبعات ادعای واهی) مطلع هستم', {required:true}),
+      text('map_tracking_code','کد رهگیری نقشهٔ ثبتی', {required:true, chainNote:'باید از سرویس «تهیه نقشه ثبتی» و دارای وضعیت صادرشده باشد'}),
+    ]
+  },
+  expertRegistryScreen('ماده ۱۱'),
+  otpScreen('consent', {title:'رضایت و تایید هشدار قانونی', warn:'توجه: درج ادعای واهی مطابق تبصرهٔ ۵ مادهٔ ۱۰ قانون دارای تبعات قانونی است.', requireAck:'false_claim_warning_ack'}),
+  {
+    id:'claim_details', title:'اطلاعات ملک و ادعا', note:'ماده ۱۴/۱۵/۱۶/۱۷',
+    fields:[
+      sel('property_type','نوع ملک', [{v:'land',l:'زمین'},{v:'apartment',l:'آپارتمان'},{v:'villa',l:'ویلایی'}], {required:true}),
+      sel('property_usage','کاربری ملک', [{v:'residential',l:'مسکونی'},{v:'commercial',l:'تجاری'},{v:'administrative',l:'اداری'},{v:'agricultural',l:'کشاورزی'}], {required:true}),
+      text('main_registry_plaque','پلاک ثبتی اصلی (اختیاری)'),
+      text('sub_registry_plaque','پلاک ثبتی فرعی (اختیاری)'),
+      sel('claim_type','نوع ادعا', [
+        {v:'ownership_of_object',l:'مالکیت عین'},{v:'right_of_easement',l:'حق ارتفاق'},
+        {v:'right_of_usufruct',l:'حق انتفاع'},{v:'ownership_of_benefits',l:'مالکیت منافع'}], {required:true}),
+      sel('claimed_ownership_type','نوع مالکیت مورد ادعا', [{v:'area',l:'عرصه'},{v:'structure',l:'اعیان'},{v:'area_and_structure',l:'عرصه و اعیان'}], {required:true}),
+      num('share_total','سهم کل (مخرج کسر مالکیت)', {ref:'ماده ۱۷', required:true, visibleIf: d => d.claim_type === 'ownership_of_object'}),
+      num('share_partial','سهم جزء (صورت کسر مالکیت)', {ref:'ماده ۱۷', required:true, visibleIf: d => d.claim_type === 'ownership_of_object',
+        validate:(v,d)=> (d.claim_type==='ownership_of_object' && d.share_total && Number(v) > Number(d.share_total)) ? 'سهم جزء نباید بزرگ‌تر از سهم کل باشد.' : null }),
+      repeat('documents','مستندات پشتیبان ادعا', [
+        sel('document_type','نوع مستند', [
+          {v:'sale_deed',l:'مبایعه‌نامه'},{v:'settlement_deed',l:'صلح‌نامه'},{v:'preliminary_contract',l:'قولنامه'},
+          {v:'partition_deed',l:'تقسیم‌نامه'},{v:'gift_deed',l:'هبه‌نامه'},{v:'court_ruling',l:'آرای محاکم'},
+          {v:'farmer_possession_record',l:'نسق زارعانه'},{v:'testimony_affidavit',l:'استشهادیه'},
+          {v:'inheritance_certificate',l:'گواهی انحصار وراثت'},{v:'other',l:'سایر'}], {required:true}),
+        text('document_number','شمارهٔ سند (اختیاری)'),
+        dateF('document_date','تاریخ تنظیم سند (اختیاری)'),
+        file('document_image_ref','تصویر سند', {required:true}),
+      ], {ref:'ماده ۱۶', required:true, minItems:1, addLabel:'افزودن مستند'}),
+      chk('government_dues_applicable','این ادعا شامل حقوق دولتی است'),
+    ]
+  },
+  resultScreen('final', {title:'صدور کد رهگیری ادعا', label:'کد رهگیری ادعا', prefix:'CLAIM',
+    extra:{ govDuesGate:true } }),
+  {
+    id:'guidance', title:'راهنمایی ثبتی', note:'ماده ۱۹', kind:'guidance',
+    fields:[
+      sel('guidance_method','روش ارائهٔ راهنمایی', [{v:'expert',l:'کارشناس ثبتی و حقوقی'},{v:'ai_tool',l:'ابزار هوش مصنوعی'}], {required:true}),
+    ]
+  },
+];
+
+/* =========================================================
+   سرویس ۳ — درج گواهی اقدام
+   ========================================================= */
+const ACTION_SCREENS = [
+  {
+    id:'identity', title:'هویت و سمت متقاضی', note:'ماده ۶',
+    fields:[
+      text('applicant_national_code','کد ملی متقاضی', {required:true}),
+      text('applicant_phone','شمارهٔ تلفن همراه متقاضی', {required:true}),
+      chk('applicant_18_and_alive','متقاضی بالای ۱۸ سال و در قید حیات است', {required:true}),
+      sel('sena_status','وضعیت ثبت‌نام در سامانهٔ ثنا', SENA_OPTS, {required:true}),
+      sel('applicant_role','سمت متقاضی', ROLE_OPTS, {required:true}),
+    ]
+  },
+  representativeScreen('action'),
+  {
+    id:'claim_ref', title:'ادعای مرجع و وضعیت فوت مدعی', note:'ماده ۶/۷',
+    fields:[
+      text('claim_tracking_code','کد رهگیری درج ادعا', {required:true, chainNote:'نباید بیش از ۲ سال از تاریخ درج ادعا گذشته باشد؛ مگر با احتساب قاعدهٔ فوت مدعی'}),
+      chk('claimant_deceased','مدعی فوت شده است'),
+      text('deceased_national_code','کد ملی متوفی', {required:true, visibleIf: d => d.claimant_deceased, hint:'باید یکی از وراث طبق گواهی انحصار وراثت باشد'}),
+      dateF('death_date','تاریخ فوت مدعی', {required:true, visibleIf: d => d.claimant_deceased, ref:'مهلت حداکثر ۵ ماه از این تاریخ (یا سقف ۲ سال، هرکدام دیرتر)'}),
+    ]
+  },
+  expertRegistryScreen('ماده ۱۲'),
+  otpScreen('consent', {title:'رضایت و تایید نهایی'}),
+  {
+    id:'certificate_details', title:'اطلاعات گواهی اقدام', note:'ماده ۱۵/۱۶',
+    fields:[
+      sel('action_authority','مرجع اقدام', [
+        {v:'registry_org',l:'سازمان ثبت'},{v:'judiciary',l:'قوهٔ قضاییه'},
+        {v:'organizing_board',l:'هیئت سامان‌دهی'},{v:'determination_board',l:'هیئت تعیین تکلیف'}], {required:true}),
+      sel('action_type','نوع اقدام', [
+        {v:'judicial_claim',l:'طرح دعوا در مراجع قضایی'},{v:'initial_registration',l:'ثبت اولیه'},
+        {v:'organizing_board_request',l:'طرح تقاضا در هیئت سامان‌دهی'},{v:'determination_board_request',l:'طرح تقاضا در هیئت تعیین تکلیف'}], {required:true}),
+      dateF('action_issue_date','تاریخ صدور گواهی اقدام', {required:true}),
+      text('action_certificate_unique_id','شناسهٔ یکتای گواهی اقدام (اختیاری)'),
+      file('action_certificate_image_ref','تصویر گواهی اقدام', {required:true}),
+    ]
+  },
+  resultScreen('final', {title:'صدور کد رهگیری نهایی', label:'کد رهگیری گواهی اقدام (سند نهایی زنجیره)', prefix:'ACT'}),
+];
+
+const SERVICES = [
+  {key:'map', name:'تهیه نقشه ثبتی', screens: MAP_SCREENS},
+  {key:'claim', name:'درج ادعا', screens: CLAIM_SCREENS, chainField:'map_tracking_code', chainFrom:'map'},
+  {key:'action', name:'درج گواهی اقدام', screens: ACTION_SCREENS, chainField:'claim_tracking_code', chainFrom:'claim'},
+];
+
+/* =========================================================
+   State
+   ========================================================= */
+let state = {
+  currentService: 0,
+  serviceState: SERVICES.map(()=> ({ screenIdx:0, data:{}, trackingCode:null, rejected:false, otpCode:null, otpVerified:false })),
+};
+
+function genCode(prefix){ return prefix+'-'+Math.floor(100000+Math.random()*899999); }
+
+function visibleFields(fields, data){
+  return fields.filter(f => !f.visibleIf || f.visibleIf(data));
+}
+function visibleScreens(screens, data){
+  return screens.filter(s => !s.visibleIf || s.visibleIf(data));
+}
+
+/* =========================================================
+   Rendering
+   ========================================================= */
+function renderLedger(){
+  const el = document.getElementById('ledger');
+  el.innerHTML = '';
+  SERVICES.forEach((svc,i)=>{
+    const st = state.serviceState[i];
+    const prevDone = i===0 || state.serviceState[i-1].trackingCode;
+    const unlocked = prevDone;
+    const active = i===state.currentService;
+    const done = !!st.trackingCode;
+    const card = document.createElement('div');
+    card.className = 'stagecard '+(unlocked?(active?'active':''):'locked');
+    card.innerHTML = `
+      <div class="num">سرویس ${i+1} از ۳</div>
+      <div class="name">${svc.name}</div>
+      <div class="status">
+        <span class="dot ${done?'done':(active?'now':'')}"></span>
+        <span>${st.rejected? 'رد شد' : done? 'صادر شده' : (unlocked?(active?'در حال انجام':'آمادهٔ شروع'):'قفل')}</span>
+      </div>
+      ${done? `<div class="code mono">${st.trackingCode}</div>` : ''}
+    `;
+    if(unlocked){ card.onclick = ()=>{ state.currentService = i; renderAll(); }; }
+    el.appendChild(card);
+    if(i<SERVICES.length-1){
+      const a = document.createElement('div'); a.className='arrow-between'; a.innerHTML='&#8592;'; el.appendChild(a);
+    }
+  });
+}
+
+function fieldValue(data, key){ return data[key]; }
+
+function renderFieldHTML(f, data, pathPrefix=''){
+  const key = pathPrefix + f.key;
+  const val = fieldValue(data, key) ?? '';
+  const refTag = f.ref ? `<span class="ref">${f.ref}</span>` : '';
+  const hint = f.hint ? `<span class="hint">${f.hint}</span>` : '';
+  let inner = '';
+  if(f.type==='text' || f.type==='number' || f.type==='date'){
+    const inputType = f.type==='text'?'text':f.type;
+    inner = `<input type="${inputType}" class="mono" data-key="${key}" value="${val}" ${f.readonly?'readonly':''}/>`;
+  } else if(f.type==='select'){
+    inner = `<select data-key="${key}">
+      <option value="">— انتخاب کنید —</option>
+      ${f.options.map(o=>`<option value="${o.v}" ${String(val)===o.v?'selected':''}>${o.l}</option>`).join('')}
+    </select>`;
+  } else if(f.type==='textarea'){
+    inner = `<textarea data-key="${key}">${val}</textarea>`;
+  } else if(f.type==='checkbox'){
+    return `<div class="field" data-fieldkey="${key}">
+      <div class="checkrow"><input type="checkbox" data-key="${key}" ${val?'checked':''}/><label>${f.label} ${refTag}</label></div>
+      ${hint}
+      <div class="errmsg" data-errfor="${key}" style="display:none"></div>
+    </div>`;
+  } else if(f.type==='file'){
+    const done = !!val;
+    return `<div class="field" data-fieldkey="${key}">
+      <label>${f.label} ${refTag}</label>
+      <div class="filebtn ${done?'done':''}" data-filekey="${key}">${done? '✓ بارگذاری شد (نمایشی)' : '⬆ بارگذاری فایل (نمایشی)'}</div>
+      ${hint}
+      <div class="errmsg" data-errfor="${key}" style="display:none"></div>
+    </div>`;
+  } else if(f.type==='repeat'){
+    return renderRepeatField(f, data, key);
+  }
+  return `<div class="field" data-fieldkey="${key}">
+    <label>${f.label} ${refTag}</label>
+    ${inner}
+    ${hint}
+    <div class="errmsg" data-errfor="${key}" style="display:none"></div>
+  </div>`;
+}
+
+function renderRepeatField(f, data, key){
+  if(!data[key]) data[key] = [];
+  const items = data[key];
+  const rows = items.map((item, idx)=>{
+    const subHTML = f.subFields.map(sf => renderFieldHTML(sf, item, '')).join('');
+    return `<div class="repeat-item" data-repeat="${key}" data-idx="${idx}">
+      <span class="rm" data-repeatremove="${key}:${idx}">حذف ✕</span>
+      ${subHTML}
+    </div>`;
+  }).join('');
+  return `<div class="field" data-fieldkey="${key}" data-repeatroot="${key}">
+    <label>${f.label} ${f.ref?`<span class="ref">${f.ref}</span>`:''}</label>
+    <div data-repeatlist="${key}">${rows}</div>
+    <button type="button" class="add-btn" data-repeatadd="${key}">+ ${f.addLabel||'افزودن'}</button>
+    <div class="errmsg" data-errfor="${key}" style="display:none"></div>
+  </div>`;
+}
+
+function bindFieldEvents(container, data, screen){
+  container.querySelectorAll('[data-key]').forEach(el=>{
+    const key = el.getAttribute('data-key');
+    const isRepeatChild = el.closest('[data-repeat]');
+    const setVal = (target)=>{
+      let v;
+      if(el.type==='checkbox') v = el.checked;
+      else if(el.type==='number') v = el.value===''? null : Number(el.value);
+      else v = el.value;
+      if(isRepeatChild){
+        const rootKey = isRepeatChild.getAttribute('data-repeat');
+        const idx = Number(isRepeatChild.getAttribute('data-idx'));
+        data[rootKey][idx][key] = v;
+      } else {
+        data[key] = v;
+      }
+      renderPanel(); // re-render for conditional visibility
+    };
+    el.addEventListener('change', ()=> setVal());
+  });
+
+  container.querySelectorAll('[data-filekey]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = el.getAttribute('data-filekey');
+      const isRepeatChild = el.closest('[data-repeat]');
+      if(isRepeatChild){
+        const rootKey = isRepeatChild.getAttribute('data-repeat');
+        const idx = Number(isRepeatChild.getAttribute('data-idx'));
+        data[rootKey][idx][key] = !data[rootKey][idx][key];
+      } else {
+        data[key] = !data[key];
+      }
+      renderPanel();
+    });
+  });
+
+  container.querySelectorAll('[data-repeatadd]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const key = el.getAttribute('data-repeatadd');
+      if(!data[key]) data[key] = [];
+      data[key].push({});
+      renderPanel();
+    });
+  });
+  container.querySelectorAll('[data-repeatremove]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const [key, idx] = el.getAttribute('data-repeatremove').split(':');
+      data[key].splice(Number(idx),1);
+      renderPanel();
+    });
+  });
+}
+
+function validateScreen(screen, data){
+  const errors = {};
+  const fields = visibleFields(screen.fields||[], data);
+  fields.forEach(f=>{
+    if(f.type==='repeat'){
+      const items = data[f.key]||[];
+      if(f.required && items.length < (f.minItems||1)){
+        errors[f.key] = `حداقل ${f.minItems||1} مورد الزامی است.`;
+      }
+      items.forEach((item, idx)=>{
+        visibleFields(f.subFields, item).forEach(sf=>{
+          if(sf.required && (item[sf.key]===undefined || item[sf.key]==='' || item[sf.key]===null)){
+            errors[f.key] = 'همهٔ فیلدهای الزامی هر مورد را تکمیل کنید.';
+          }
+        });
+      });
+      return;
+    }
+    const v = data[f.key];
+    if(f.required && (v===undefined || v==='' || v===null || v===false)){
+      errors[f.key] = 'این فیلد الزامی است.';
+      return;
+    }
+    if(f.validate){
+      const msg = f.validate(v, data);
+      if(msg) errors[f.key] = msg;
+    }
+  });
+  return errors;
+}
+
+function renderScreenForm(screen, data){
+  let html = '';
+  if(screen.note){
+    html += `<div class="info-box">مرجع: ${screen.note}</div>`;
+  }
+  visibleFields(screen.fields, data).forEach(f=>{
+    html += renderFieldHTML(f, data);
+  });
+  return html;
+}
+
+function renderPanel(){
+  const svcIdx = state.currentService;
+  const svc = SERVICES[svcIdx];
+  const st = state.serviceState[svcIdx];
+  const screens = visibleScreens(svc.screens, st.data);
+  if(st.screenIdx >= screens.length) st.screenIdx = screens.length-1;
+  const screen = screens[st.screenIdx];
+  const panel = document.getElementById('panel');
+
+  // auto-chain: prefill chain field once when entering map_ref/claim_ref screens
+  if(svc.chainField && st.data[svc.chainField] === undefined){
+    const fromIdx = SERVICES.findIndex(s=>s.key===svc.chainFrom);
+    st.data[svc.chainField] = state.serviceState[fromIdx].trackingCode || '';
+  }
+
+  const dots = screens.map((s,i)=>{
+    let cls = i===st.screenIdx?'active':(i<st.screenIdx?'checked':'');
+    return `<span class="${cls}">${i+1}. ${s.title}</span>`;
+  }).join('');
+
+  let body = '';
+
+  if(st.rejected){
+    body = `<div class="rejected-box"><div class="x">✕</div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px;">فرآیند متوقف شد</div>
+      <div style="color:var(--ink-soft);font-size:13px;">${st.rejectReason||'نمایندگی توسط کارشناس احراز نشد.'}</div></div>`;
+    panel.innerHTML = `<h2>${svc.name}</h2><div class="lead">وضعیت: رد شده</div>${body}`;
+    return;
+  }
+
+  if(screen.kind === 'otp'){
+    body += screen.warn ? `<div class="warn-box">⚠ ${screen.warn}</div>` : '';
+    if(!st.otpCode){
+      body += `<button class="btn-primary" id="sendOtpBtn" style="margin-bottom:16px;">ارسال رمز یکبارمصرف</button>`;
+    } else {
+      body += `<div class="info-box">رمز شبیه‌سازی‌شده (فقط برای دمو): <b class="mono">${st.otpCode}</b></div>`;
+      body += `<div class="field"><label>رمز یکبارمصرف پیامکی</label><input type="text" class="mono" id="otpInput" maxlength="4" placeholder="----"/></div>`;
+      if(screen.requireAck){
+        body += `<div class="checkrow"><input type="checkbox" id="ackWarn"/><label>هشدار بالا را مطالعه کردم</label></div>`;
+      }
+    }
+  } else if(screen.kind === 'result'){
+    const gateGov = screen.extra?.govDuesGate && st.data.government_dues_applicable && !st.data.government_dues_paid;
+    if(gateGov){
+      body += `<div class="warn-box">⚠ این ادعا شامل حقوق دولتی است؛ طبق تبصرهٔ ماده ۱۸، مبلغ باید ابتدا به خزانه واریز شود.</div>
+        <div class="checkrow"><input type="checkbox" id="govPaid"/><label>واریز به خزانه انجام شد (نمایشی)</label></div>`;
+    } else if(!st.trackingCode){
+      body += `<div class="info-box">با کلیک روی «کنترل خودکار و صدور کد رهگیری»، سازمان به‌صورت کاملاً سیستمی و بدون دخالت انسانی این پرونده را بررسی و کد رهگیری صادر می‌کند.</div>`;
+    } else {
+      body += `<div class="stamp-screen">
+        <div class="stamp"><div class="inner-ring"><div class="seal-title">تایید شد</div><div class="seal-sub">سازمان ثبت اسناد و املاک</div></div></div>
+        <div class="track-code mono">${st.trackingCode}</div>
+        <div class="track-label">${screen.label}</div>
+      </div>`;
+    }
+  } else if(screen.kind === 'guidance'){
+    if(st.data.guidance_provided){
+      body += `<div class="info-box"><b>راهنمایی ارائه‌شده:</b><br/>${st.data.guidance_recommended_action}</div>`;
+    } else {
+      body += renderScreenForm(screen, st.data);
+    }
+  } else {
+    body += renderScreenForm(screen, st.data);
+  }
+
+  const isFirstOverall = svcIdx===0 && st.screenIdx===0;
+  const isLastScreen = st.screenIdx === screens.length-1;
+  const isFinalIssued = screen.kind==='result' && st.trackingCode;
+  const isGuidanceDone = screen.kind==='guidance' && st.data.guidance_provided;
+
+  let nextLabel = 'مرحله بعد';
+  if(isFinalIssued && svcIdx < SERVICES.length-1) nextLabel = 'رفتن به سرویس بعدی';
+  else if(isFinalIssued && svc.key==='claim') nextLabel = 'رفتن به راهنمایی ثبتی';
+  else if(isFinalIssued) nextLabel = 'پایان زنجیره';
+  else if(isGuidanceDone) nextLabel = 'رفتن به سرویس بعدی';
+
+  panel.innerHTML = `
+    <h2>${svc.name}</h2>
+    <div class="lead">مرحلهٔ ${st.screenIdx+1} از ${screens.length}</div>
+    <div class="stepdots">${dots}</div>
+    ${body}
+    <div class="actions">
+      <button class="btn-ghost" ${isFirstOverall?'disabled':''} id="backBtn">مرحله قبل</button>
+      <button class="btn-primary" id="nextBtn">${nextLabel}</button>
+    </div>
+  `;
+
+  bindFieldEvents(panel, st.data, screen);
+
+  const sendOtpBtn = document.getElementById('sendOtpBtn');
+  if(sendOtpBtn) sendOtpBtn.onclick = ()=>{ st.otpCode = String(Math.floor(1000+Math.random()*8999)); renderPanel(); };
+
+  const govPaid = document.getElementById('govPaid');
+  if(govPaid) govPaid.onchange = ()=>{ st.data.government_dues_paid = govPaid.checked; renderPanel(); };
+
+  document.getElementById('backBtn').onclick = goBack;
+  document.getElementById('nextBtn').onclick = goNext;
+}
+
+function goBack(){
+  const st = state.serviceState[state.currentService];
+  if(st.screenIdx>0){ st.screenIdx--; renderAll(); }
+}
+
+function goNext(){
+  const svcIdx = state.currentService;
+  const svc = SERVICES[svcIdx];
+  const st = state.serviceState[svcIdx];
+  const screens = visibleScreens(svc.screens, st.data);
+  const screen = screens[st.screenIdx];
+
+  if(screen.kind === 'otp'){
+    if(!st.otpCode) return; // must send first
+    const otpInput = document.getElementById('otpInput');
+    if(!otpInput || otpInput.value !== st.otpCode){
+      otpInput && (otpInput.style.borderColor='var(--red)');
+      return;
+    }
+    if(screen.requireAck){
+      const ack = document.getElementById('ackWarn');
+      if(!ack || !ack.checked) return;
+      st.data[screen.requireAck] = true;
+    }
+    st.data.consent_verified = true;
+    st.screenIdx++;
+    renderAll();
+    return;
+  }
+
+  if(screen.kind === 'result'){
+    const gateGov = screen.extra?.govDuesGate && st.data.government_dues_applicable && !st.data.government_dues_paid;
+    if(gateGov) return; // handled by checkbox above, block until paid
+    if(!st.trackingCode){
+      st.trackingCode = genCode(screen.prefix);
+      renderAll();
+      return;
+    }
+    // already issued -> move on
+    if(svcIdx < SERVICES.length-1 && svc.key !== 'claim'){
+      state.currentService = svcIdx+1;
+    } else if(svc.key === 'claim'){
+      st.screenIdx++; // go to guidance screen
+    } else {
+      // last service finished — nothing more to do
+    }
+    renderAll();
+    return;
+  }
+
+  if(screen.kind === 'guidance'){
+    if(!st.data.guidance_provided){
+      const errors = validateScreen(screen, st.data);
+      if(Object.keys(errors).length){ showErrors(errors); return; }
+      st.data.guidance_provided = true;
+      st.data.guidance_recommended_action = st.data.guidance_method === 'ai_tool'
+        ? 'پیشنهاد ابزار هوش مصنوعی (نمونه): با توجه به نوع ادعا، طرح دعوای اثبات مالکیت در مراجع قضایی توصیه می‌شود.'
+        : 'نظر کارشناس (نمونه): با توجه به مستندات ارائه‌شده، ثبت اولیه در هیئت تعیین تکلیف مسیر مناسب‌تری است.';
+      renderAll();
+      return;
+    }
+    if(svcIdx < SERVICES.length-1) state.currentService = svcIdx+1;
+    renderAll();
+    return;
+  }
+
+  // normal form screen
+  const errors = validateScreen(screen, st.data);
+  if(Object.keys(errors).length){ showErrors(errors); return; }
+
+  // special: expert rejection branch
+  if(screen.id==='expert_registry' && st.data.registry_expert_opinion === 'not_verified'){
+    st.rejected = true;
+    st.rejectReason = 'کارشناس امور ثبتی و حقوقی نمایندگی را احراز نکرد؛ طبق سند مربوطه، فرآیند ادامه نمی‌یابد.';
+    renderAll();
+    return;
+  }
+
+  if(st.screenIdx < screens.length-1){ st.screenIdx++; }
+  renderAll();
+}
+
+function showErrors(errors){
+  document.querySelectorAll('.errmsg').forEach(e=>{ e.style.display='none'; e.textContent=''; });
+  document.querySelectorAll('.field').forEach(e=> e.classList.remove('err'));
+  Object.entries(errors).forEach(([key,msg])=>{
+    const el = document.querySelector(`[data-errfor="${key}"]`);
+    if(el){ el.style.display='block'; el.textContent = msg; el.closest('.field').classList.add('err'); }
+  });
+}
+
+function renderAll(){ renderLedger(); renderPanel(); }
+renderAll();
+</script>
+
+</body>
+</html>

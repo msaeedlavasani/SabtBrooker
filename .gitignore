@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+.pnp/
+
+# Build
+.next/
+out/
+dist/
+build/
+
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# Flutter
+.metadata
+.dart_tool/
+.packages
+build/
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Secrets
+secrets/
+credentials/
