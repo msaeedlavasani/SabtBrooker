@@ -22,7 +22,7 @@ ENV TZ=Asia/Tehran
 WORKDIR /app
 
 COPY --from=builder /app/server .
-COPY --from=builder /app/migrations ./migrations
+# Migrations run separately via golang-migrate / Flyway — not baked into image
 
 # Create non-root user
 RUN adduser -D -g '' appuser
