@@ -135,13 +135,14 @@ func main() {
 		if req.Purpose == "" {
 			req.Purpose = "auth"
 		}
-		_, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
+		code, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
 		if err != nil {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
 		}
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"message":    "کد تایید ارسال شد",
 			"expires_in": int(time.Until(expiresAt).Seconds()),
+			"dev_otp":    code, // فقط در محیط توسعه — در production حذف شود
 		})
 	})
 
