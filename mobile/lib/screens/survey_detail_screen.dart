@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sabt_brooker_surveyor/models/case_model.dart';
 import 'package:sabt_brooker_surveyor/utils/location_service.dart';
+import 'package:sabt_brooker_surveyor/utils/database_helper.dart';
 
 class SurveyDetailScreen extends StatefulWidget {
   final CaseModel caseData;
@@ -16,15 +18,17 @@ class SurveyDetailScreen extends StatefulWidget {
 class _SurveyDetailScreenState extends State<SurveyDetailScreen> {
   final LocationService _locationService = LocationService();
   final ImagePicker _picker = ImagePicker();
+  final DatabaseHelper _dbHelper = DatabaseHelper();
+  bool _saving = false;
   
-  Map<String, XFile?> _photos = {
+  final Map<String, XFile?> _photos = {
     'North': null,
     'South': null,
     'East': null,
     'West': null,
   };
 
-  Map<String, Position?> _locations = {
+  final Map<String, Position?> _locations = {
     'North': null,
     'South': null,
     'East': null,
@@ -33,10 +37,7 @@ class _SurveyDetailScreenState extends State<SurveyDetailScreen> {
 
   Future<void> _capturePhoto(String side) async {
     try {
-      // 1. Get high accuracy location first
       Position position = await _locationService.getCurrentLocation();
-      
-      // 2. Open camera
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
         imageQuality: 80,
@@ -52,6 +53,45 @@ class _SurveyDetailScreenState extends State<SurveyDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: $e')),
       );
+    }
+  }
+
+  Future<void> _submitSurvey() async {
+    setState(() => _saving = true);
+    try {
+      final surveyId = widget.caseData.id;
+      
+      await _dbHelper.insertSurvey({
+        'id': surveyId,
+        'case_id': widget.caseData.id,
+        'status': 'captured',
+        'created_at': DateTime.now().toIso8601String(),
+        'data_json': jsonEncode({'city': widget.caseData.city}),
+      });
+
+      for (var entry in _photos.entries) {
+        if (entry.value != null) {
+          await _dbHelper.insertPhoto({
+            'survey_id': surveyId,
+            'file_path': entry.value!.path,
+            'side': entry.key.toLowerCase(),
+            'latitude': _locations[entry.key]!.latitude,
+            'longitude': _locations[entry.key]!.longitude,
+            'created_at': DateTime.now().toIso8601String(),
+          });
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('اطلاعات با موفقیت در دیتابیس محلی ذخیره شد (آفلاین)')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('خطا در ذخیره‌سازی: $e')),
+      );
+    } finally {
+      setState(() => _saving = false);
     }
   }
 
@@ -90,16 +130,16 @@ class _SurveyDetailScreenState extends State<SurveyDetailScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: _photos.values.any((e) => e == null) ? null : () {
-                  // Submit logic
-                },
+                onPressed: _photos.values.any((e) => e == null) || _saving ? null : _submitSurvey,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF101B33),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('ثبت و تایید نهایی بازدید', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: _saving 
+                  ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Text('ثبت و ذخیره در موبایل (Offline Save)', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ),
           ],
