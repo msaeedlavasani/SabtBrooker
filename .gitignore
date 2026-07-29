@@ -52,3 +52,4 @@ docker-compose.override.yml
 # Secrets
 secrets/
 credentials/
+backend/test_bin
