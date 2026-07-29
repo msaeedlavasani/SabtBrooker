@@ -1,6 +1,8 @@
 # SabtBrooker — سند تحویل پروژه
 
-> این فایل رو به جلسه جدید بده تا دقیقاً از همینجا ادامه بده.
+> آخرین به‌روزرسانی: ۲۰۲۶-۰۷-۲۹ (شروع فاز ۲)  
+> فاز فعلی: Phase 2 — پیاده‌سازی Frontend  
+> پیشرفت کلی: ~۶۵٪
 
 ---
 
@@ -23,7 +25,7 @@
 **https://github.com/msaeedlavasani/SabtBrooker**
 
 Branch: `main`  
-آخرین commit: `06e05b4` — `fix: relax identity guard for dev mode`
+آخرین commit: `fcc2cde` — `docs: finalize Handoff status for Phase 1 completion`
 
 CI سبز است (Lint → Test → Build → Security Scan).
 
@@ -44,8 +46,9 @@ CI سبز است (Lint → Test → Build → Security Scan).
 
 ---
 
-## ۴. کدهای نوشته شده (backend/)
+## ۴. کدهای نوشته شده
 
+### Backend (Go)
 ```
 backend/
 ├── cmd/server/main.go              # ورودی اصلی — همه routeها اینجان
@@ -69,6 +72,18 @@ backend/
 ├── Dockerfile                      # Multi-stage build (golang:1.25 → alpine:3.20)
 ├── go.mod                          # Go 1.25 dependencies
 └── go.sum
+```
+
+### Frontend (Next.js)
+```
+frontend/
+├── src/
+│   ├── app/                        # App Router (Login, Dashboard)
+│   ├── lib/                        # API client (Axios)
+│   ├── components/                 # UI Components
+│   └── globals.css                 # Theme (Navy, Brass, Paper)
+├── tailwind.config.ts
+└── next.config.ts
 ```
 
 ---
@@ -117,34 +132,27 @@ backend/
 
 ```bash
 cd /Users/msl/Documents/GitHub/SabtBrooker
-export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 
-make docker-up          # بالا آوردن همه سرویس‌ها
-make docker-down        # خاموش کردن
-make migrate-up         # اجرای migrationها
-make run                # اجرای backend بدون Docker
-make test               # اجرای تست‌ها
-make docker-up -d --build backend  # rebuild فقط backend
+# Backend
+cd backend && make run
 
-# تست API
-curl -s http://localhost:8080/health
+# Frontend
+cd frontend && npm run dev
 ```
 
 ---
 
-## ۸. کارهای انجام نشده (اولویت‌بندی شده)
+## ۸. تسک‌های باقی‌مانده (فاز ۲ و بعد)
 
-| اولویت | کار | توضیح |
+| اولویت | کار | وضعیت |
 |---|---|---|
-| 🔴 ۱ | **Frontend Next.js** | تبدیل `docs/demo-reference.html` به اپ React واقعی |
-| 🔴 ۲ | **تکمیل workflow handlers** | Map service هنوز چند stage دستی نیاز داره (عکس، نقشه، جدول توصیفی) |
-| 🟡 ۳ | **اپ Flutter نقشه‌بردار** | عکس‌برداری Geo-tagged + آفلاین |
-| 🟡 ۴ | **Scheduler** | deadlineهای ۲ سال و ۵ ماه |
-| 🟡 ۵ | **File upload واقعی** | اتصال به MinIO با Pre-signed URL |
-| 🟢 ۶ | **پرداخت** | اتصال به PSP |
-| 🟢 ۷ | **SMS Gateway** | ارسال واقعی پیامک |
-| 🟢 ۸ | **Integration واقعی با سازمان** | منتظر مستندات از سازمان ثبت |
-| 🟢 ۹ | **تست نفوذ** | OWASP ASVS Level 2 |
+| 🔴 ۱ | **Frontend: ایجاد پرونده** | در حال پیاده‌سازی |
+| 🔴 ۲ | **Frontend: نقشه‌برداری** | — |
+| 🔴 ۳ | **تکمیل workflow handlers** | — |
+| 🟡 ۴ | **اپ Flutter نقشه‌بردار** | — |
+| 🟢 ۵ | **پرداخت** | — |
+| 🟢 ۶ | **SMS Gateway** | — |
+| 🟢 ۷ | **Integration واقعی با سازمان** | — |
 
 ---
 
@@ -152,13 +160,9 @@ curl -s http://localhost:8080/health
 
 1. **Go نسخه 1.26.5** روی مک در مسیر `/usr/local/go/bin/go` نصب شده است.
 2. **CI و Dockerfile** برای سازگاری با `go.mod` روی نسخه **1.25** تنظیم شده‌اند.
-2. **golang-migrate CLI** با `make migrate-install` نصب میشه
 3. **Postgres روی پورت 5433** (نه 5432 — conflict با Local)
 4. **توکن JWT توی context به صورت string** ذخیره میشه (نه uuid.UUID)
-5. **NATS non-fatal** — backend بدون NATS هم کار می‌کنه
-6. **dev_otp** توی response برمی‌گرده — فقط برای محیط توسعه
-7. **کاربر auto-create** میشه موقع OTP verify (با national_id موقت)
-8. **guardهای identity** در dev mode سختگیرانه نیستن (شاهکار و ثنا skip)
+5. **Frontend** با Next.js 15 و Tailwind CSS پیاده‌سازی شده است.
 
 ---
 
@@ -172,15 +176,4 @@ curl -s -X POST localhost:8080/v1/auth/otp/send -H "Content-Type: application/js
 # ۲. Verify + توکن
 curl -s -X POST localhost:8080/v1/auth/otp/verify -H "Content-Type: application/json" -d '{"mobile":"09121112233","otp":"XXXXX"}'
 # → access_token
-
-# ۳. پرونده
-TOKEN="..."
-curl -s -X POST localhost:8080/v1/cases -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"province":"تهران","city":"تهران","address_detail":"..."}'
-# → case id
-
-# ۴. شروع نقشه
-curl -s -X POST localhost:8080/v1/cases/{id}/submit -H "Authorization: Bearer $TOKEN"
-# → map_in_progress
-
-# ۵. ادامه زنجیره با map-services و claim-services و cert-services...
 ```
