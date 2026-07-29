@@ -9,23 +9,24 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/config"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/notification"
+	"github.com/redis/go-redis/v9"
 )
 
 // OTPService handles one-time password operations
 type OTPService struct {
-	redis *redis.Client
-	cfg   config.OTPConfig
+	redis  *redis.Client
+	cfg    config.OTPConfig
+	notify *notification.Service
 }
 
 // NewOTPService creates a new OTP service
-func NewOTPService(rdb *redis.Client, cfg config.OTPConfig) *OTPService {
-	return &OTPService{redis: rdb, cfg: cfg}
+func NewOTPService(rdb *redis.Client, cfg config.OTPConfig, notify *notification.Service) *OTPService {
+	return &OTPService{redis: rdb, cfg: cfg, notify: notify}
 }
 
-// GenerateAndSend creates an OTP, stores it in Redis, and returns the code
-// In production, this would also trigger an SMS gateway
+// GenerateAndSend creates an OTP, stores it in Redis, and sends via SMS
 func (s *OTPService) GenerateAndSend(ctx context.Context, mobile, purpose string) (string, time.Time, error) {
 	// Rate limiting check
 	if err := s.checkRateLimit(ctx, mobile); err != nil {
@@ -55,6 +56,14 @@ func (s *OTPService) GenerateAndSend(ctx context.Context, mobile, purpose string
 	pipe.Expire(ctx, key, s.cfg.TTL)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to store OTP: %w", err)
+	}
+
+	// 3. Send SMS
+	if s.notify != nil {
+		// Run in background to avoid blocking response
+		go func() {
+			s.notify.SendOTP(context.Background(), mobile, otp)
+		}()
 	}
 
 	return otp, expiresAt, nil

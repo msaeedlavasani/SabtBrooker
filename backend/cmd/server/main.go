@@ -70,15 +70,6 @@ func main() {
 		slog.Info("connected to NATS", "url", cfg.NATS.URL)
 	}
 
-	// ── Auth ────────────────────────────────────────────────────
-
-	jwtManager, err := auth.NewJWTManager(cfg.JWT)
-	if err != nil {
-		slog.Error("failed to initialize JWT manager", "error", err)
-		os.Exit(1)
-	}
-	otpService := auth.NewOTPService(rdb, cfg.OTP)
-
 	// ── Repositories ────────────────────────────────────────────
 
 	userRepo := repository.NewPostgresUserRepo(db.Pool)
@@ -115,13 +106,21 @@ func main() {
 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
 
 	// ── Services ────────────────────────────────────────────────
-	_ = notification.NewService(db.Pool, rdb) // suppress unused for now
 
-
+	notifySvc := notification.NewService(db.Pool, rdb, nil)
 	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
 	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)
 	claimSvc := service.NewClaimService(claimRepo, caseSM, claimSM, auditRepo, aiAdviceRepo)
 	certSvc := service.NewCertService(certRepo, caseSM, certSM, auditRepo)
+
+	// ── Auth ────────────────────────────────────────────────────
+
+	otpService := auth.NewOTPService(rdb, cfg.OTP, notifySvc)
+	jwtManager, err := auth.NewJWTManager(cfg.JWT)
+	if err != nil {
+		slog.Error("failed to initialize JWT manager", "error", err)
+		os.Exit(1)
+	}
 
 	// ── Handlers ────────────────────────────────────────────────
 
@@ -168,6 +167,7 @@ func main() {
 	authHandler.RegisterRoutes(v1.Group("/auth"))
 
 	// Protected routes
+	v1.Group("")
 	protected := v1.Group("")
 	protected.Use(middleware.AuthRequired(jwtManager))
 
