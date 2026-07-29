@@ -17,19 +17,15 @@ import (
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/auth"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/config"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/database"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/handler"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
 )
 
 func main() {
-	// Initialize structured logger
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})))
-
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	slog.Info("starting SabtBrooker backend...")
 
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
@@ -47,35 +43,22 @@ func main() {
 	defer db.Close()
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Redis.Addr,
-		Password: cfg.Redis.Password,
-		DB:       cfg.Redis.DB,
-	})
+	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		slog.Error("failed to connect to Redis", "error", err)
 		os.Exit(1)
 	}
 	defer rdb.Close()
-	slog.Info("connected to Redis", "addr", cfg.Redis.Addr)
 
-	// NATS
-	nc, err := nats.Connect(cfg.NATS.URL,
-		nats.MaxReconnects(cfg.NATS.MaxReconn),
+	// NATS (non-fatal if unavailable — backend works without it)
+	nc, _ := nats.Connect(cfg.NATS.URL,
+		nats.MaxReconnects(3),
 		nats.ReconnectWait(2*time.Second),
-		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			slog.Warn("NATS disconnected", "error", err)
-		}),
-		nats.ReconnectHandler(func(_ *nats.Conn) {
-			slog.Info("NATS reconnected")
-		}),
 	)
-	if err != nil {
-		slog.Error("failed to connect to NATS", "error", err)
-		os.Exit(1)
+	if nc != nil {
+		defer nc.Close()
+		slog.Info("connected to NATS", "url", cfg.NATS.URL)
 	}
-	defer nc.Close()
-	slog.Info("connected to NATS", "url", cfg.NATS.URL)
 
 	// JWT Manager
 	jwtManager, err := auth.NewJWTManager(cfg.JWT)
@@ -87,20 +70,45 @@ func main() {
 	// OTP Service
 	otpService := auth.NewOTPService(rdb, cfg.OTP)
 
-	// Workflow Engine
+	// Workflow Engines
 	caseSM := workflow.BuildCaseStateMachine(db.Pool, nc)
+	mapSM := workflow.NewStateMachine("map_service", db.Pool, nc)
+	claimSM := workflow.NewStateMachine("claim_service", db.Pool, nc)
+	certSM := workflow.NewStateMachine("cert_service", db.Pool, nc)
 
-	// Create Echo server
+	// Map service transitions
+	mapSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
+	mapSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "fieldwork_in_progress"})
+	mapSM.AddTransition(workflow.Transition{From: "fieldwork_in_progress", To: "fieldwork_done"})
+	mapSM.AddTransition(workflow.Transition{From: "fieldwork_done", To: "submitted_to_org"})
+	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+
+	// Claim service transitions
+	claimSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
+	claimSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "documents_verified"})
+	claimSM.AddTransition(workflow.Transition{From: "documents_verified", To: "submitted_to_org"})
+	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+
+	// Cert service transitions
+	certSM.AddTransition(workflow.Transition{From: "pending_data", To: "submitted_to_org"})
+	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+
+	// Handlers
+	caseHandler := handler.NewCaseHandler(db.Pool, caseSM)
+	mapHandler := handler.NewMapHandler(db.Pool, caseSM, mapSM)
+	claimHandler := handler.NewClaimHandler(db.Pool, caseSM, claimSM)
+	certHandler := handler.NewCertHandler(db.Pool, caseSM, certSM)
+
+	// Echo server
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
-
-	// Global middleware
 	e.Use(middleware.Recover())
 	e.Use(middleware.RequestLogger())
 	e.Use(middleware.CORS())
-
-	// ---- Routes ----
 
 	// Health
 	e.GET("/health", func(c echo.Context) error {
@@ -113,10 +121,8 @@ func main() {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	// API v1 group
+	// Public auth routes
 	v1 := e.Group("/v1")
-
-	// Auth routes (public)
 	authGroup := v1.Group("/auth")
 	authGroup.POST("/otp/send", func(c echo.Context) error {
 		var req struct {
@@ -129,12 +135,10 @@ func main() {
 		if req.Purpose == "" {
 			req.Purpose = "auth"
 		}
-
 		_, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
 		if err != nil {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
 		}
-
 		return c.JSON(http.StatusOK, map[string]interface{}{
 			"message":    "کد تایید ارسال شد",
 			"expires_in": int(time.Until(expiresAt).Seconds()),
@@ -153,17 +157,13 @@ func main() {
 		if req.Purpose == "" {
 			req.Purpose = "auth"
 		}
-
 		if err := otpService.Verify(c.Request().Context(), req.Mobile, req.OTP, req.Purpose); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
 		}
-
-		// Generate JWT tokens (simplified — in production, look up or create user)
 		tokens, err := jwtManager.GenerateTokenPair(uuid.Nil, "applicant", req.Mobile)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در تولید توکن"})
 		}
-
 		return c.JSON(http.StatusOK, tokens)
 	})
 
@@ -178,31 +178,13 @@ func main() {
 		})
 	})
 
-	// Cases (protected)
-	cases := protected.Group("/cases")
-	cases.GET("", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"message": "cases list — to be implemented"})
-	})
+	// Business logic routes
+	caseHandler.RegisterRoutes(protected.Group("/cases"))
+	mapHandler.RegisterRoutes(protected.Group("/map-services"))
+	claimHandler.RegisterRoutes(protected.Group("/claim-services"))
+	certHandler.RegisterRoutes(protected.Group("/cert-services"))
 
-	// Workflow status
-	protected.GET("/workflow/case/:id/status", func(c echo.Context) error {
-		caseID, err := uuid.Parse(c.Param("id"))
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "شناسه نامعتبر"})
-		}
-
-		_ = caseSM
-		_ = caseID
-
-		return c.JSON(http.StatusOK, map[string]string{"message": "ok"})
-	})
-
-	// Available transitions
-	protected.GET("/workflow/case/:id/transitions", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]string{"message": "transitions — to be implemented"})
-	})
-
-	// ---- Start server ----
+	// Start server
 	go func() {
 		addr := cfg.Server.Host + ":" + cfg.Server.Port
 		slog.Info("server started", "addr", addr)
@@ -212,18 +194,15 @@ func main() {
 		}
 	}()
 
-	// ---- Graceful shutdown ----
+	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-
-	slog.Info("shutting down server...")
+	slog.Info("shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
 	defer cancel()
-
 	if err := e.Shutdown(shutdownCtx); err != nil {
-		slog.Error("server shutdown error", "error", err)
+		slog.Error("shutdown error", "error", err)
 	}
-
-	slog.Info("server stopped gracefully")
+	slog.Info("server stopped")
 }
