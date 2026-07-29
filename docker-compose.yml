@@ -1,0 +1,119 @@
+version: "3.9"
+
+services:
+  # ====================================================================
+  # PostgreSQL 16 + PostGIS
+  # ====================================================================
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: sabtbrooker-db
+    environment:
+      POSTGRES_USER: sabtbrooker
+      POSTGRES_PASSWORD: sabtbrooker
+      POSTGRES_DB: sabtbrooker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sabtbrooker"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ====================================================================
+  # Redis
+  # ====================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: sabtbrooker-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ====================================================================
+  # NATS JetStream
+  # ====================================================================
+  nats:
+    image: nats:2.10-alpine
+    container_name: sabtbrooker-nats
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # monitoring
+    command: -js -m 8222
+    healthcheck:
+      test: ["CMD", "wget", "-q", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ====================================================================
+  # MinIO (S3-compatible object storage)
+  # ====================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: sabtbrooker-minio
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ====================================================================
+  # Backend API (Go)
+  # ====================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sabtbrooker-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: sabtbrooker
+      DB_PASSWORD: sabtbrooker
+      DB_NAME: sabtbrooker
+      DB_SSLMODE: disable
+      REDIS_ADDR: redis:6379
+      NATS_URL: nats://nats:4222
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: sabtbrooker
+      MINIO_USE_SSL: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
