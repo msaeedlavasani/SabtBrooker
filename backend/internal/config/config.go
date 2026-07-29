@@ -97,7 +97,7 @@ func Load() (*Config, error) {
 		},
 		DB: DBConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnv("DB_PORT", "5432"),
+			Port:     getEnv("DB_PORT", "5433"),
 			User:     getEnv("DB_USER", "sabtbrooker"),
 			Password: getEnv("DB_PASSWORD", "sabtbrooker"),
 			DBName:   getEnv("DB_NAME", "sabtbrooker"),

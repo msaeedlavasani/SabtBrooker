@@ -12,10 +12,9 @@ services:
       POSTGRES_PASSWORD: sabtbrooker
       POSTGRES_DB: sabtbrooker
     ports:
-      - "5432:5432"
+      - "5433:5432"  # host 5433 → container 5432 (avoid conflict with local Postgres)
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U sabtbrooker"]
       interval: 5s

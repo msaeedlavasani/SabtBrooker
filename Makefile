@@ -30,18 +30,16 @@ mod: ## Tidy go modules
 # ====================================================================
 
 migrate-up: ## Run all pending migrations
-	cd backend && go run github.com/golang-migrate/migrate/v4/cmd/migrate \
-		-database "postgres://sabtbrooker:sabtbrooker@localhost:5432/sabtbrooker?sslmode=disable" \
-		-path migrations up
+	cd backend && migrate -database "postgres://sabtbrooker:sabtbrooker@localhost:5433/sabtbrooker?sslmode=disable" -path migrations up
 
 migrate-down: ## Rollback last migration
-	cd backend && go run github.com/golang-migrate/migrate/v4/cmd/migrate \
-		-database "postgres://sabtbrooker:sabtbrooker@localhost:5432/sabtbrooker?sslmode=disable" \
-		-path migrations down 1
+	cd backend && migrate -database "postgres://sabtbrooker:sabtbrooker@localhost:5433/sabtbrooker?sslmode=disable" -path migrations down 1
 
 migrate-create: ## Create new migration (usage: make migrate-create NAME=add_foo)
-	cd backend && go run github.com/golang-migrate/migrate/v4/cmd/migrate create \
-		-ext sql -dir migrations -seq $(NAME)
+	cd backend && migrate create -ext sql -dir migrations -seq $(NAME)
+
+migrate-install: ## Install golang-migrate CLI
+	go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
 # ====================================================================
 # Docker
