@@ -25,6 +25,24 @@ func (h *StorageHandler) RegisterRoutes(g *echo.Group) {
 
 func (h *StorageHandler) GetPresignedURL(c echo.Context) error {
 	fileName := c.QueryParam("name")
+	contentType := c.QueryParam("type") // e.g. application/pdf, image/jpeg
+
+	// Validate file extension/type
+	allowedTypes := map[string]bool{
+		"application/pdf":                               true,
+		"image/jpeg":                                    true,
+		"image/png":                                     true,
+		"application/octet-stream":                      true, // for DWG/DXF
+		"application/x-autocad":                         true,
+		"application/acad":                              true,
+		"image/vnd.dwg":                                 true,
+		"image/x-dwg":                                   true,
+	}
+
+	if contentType != "" && !allowedTypes[contentType] {
+		return BadRequest(c, "نوع فایل مجاز نیست. فقط PDF، تصاویر و نقشه‌های فنی پذیرفته می‌شوند")
+	}
+
 	if fileName == "" {
 		fileName = uuid.New().String()
 	} else {
