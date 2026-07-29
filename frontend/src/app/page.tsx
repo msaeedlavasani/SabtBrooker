@@ -38,7 +38,14 @@ export default function LoginPage() {
     try {
       const res = await api.post("/v1/auth/otp/verify", { mobile, otp });
       localStorage.setItem("access_token", res.data.access_token);
-      router.push("/dashboard");
+      
+      // Get user profile to determine role
+      const userRes = await api.get("/v1/auth/me");
+      if (userRes.data.role === "expert") {
+        router.push("/expert/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(err.response?.data?.error || "کد تایید نامعتبر است");
     } finally {
