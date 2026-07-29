@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"strings"
