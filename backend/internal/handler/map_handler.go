@@ -19,6 +19,7 @@ func (h *MapHandler) RegisterRoutes(g *echo.Group) {
 	g.GET("/:id", h.Get)
 	g.POST("/:id/consent", h.RequestConsent)
 	g.POST("/:id/consent/verify", h.VerifyConsent)
+	g.POST("/:id/accept", h.Accept)
 	g.POST("/:id/fieldwork/start", h.StartFieldwork)
 	g.POST("/:id/fieldwork/submit", h.SubmitFieldwork)
 	g.POST("/:id/submit", h.SubmitToOrg)
@@ -56,6 +57,22 @@ func (h *MapHandler) VerifyConsent(c echo.Context) error {
 		return Conflict(c, err.Error())
 	}
 	return OK(c, map[string]string{"message": "رضایت ثبت شد — کارشناس می‌تواند عملیات میدانی را آغاز کند"})
+}
+
+func (h *MapHandler) Accept(c echo.Context) error {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		return BadRequest(c, "شناسه نامعتبر")
+	}
+	
+	// Get expert ID from context (JWT)
+	expertID := middleware.GetUserID(c)
+	
+	if err := h.svc.AssignExpert(c.Request().Context(), id, expertID); err != nil {
+		return Unprocessable(c, err.Error(), nil)
+	}
+	
+	return OK(c, map[string]string{"message": "پرونده توسط شما پذیرفته شد"})
 }
 
 func (h *MapHandler) StartFieldwork(c echo.Context) error {

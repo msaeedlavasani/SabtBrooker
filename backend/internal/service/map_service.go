@@ -56,6 +56,11 @@ func (s *MapService) VerifyConsent(ctx context.Context, id uuid.UUID) error {
 	return s.mapRepo.VerifyConsent(ctx, id)
 }
 
+// AssignExpert assigns an expert to the map service
+func (s *MapService) AssignExpert(ctx context.Context, id uuid.UUID, expertID uuid.UUID) error {
+	return s.mapRepo.AssignExpert(ctx, id, expertID)
+}
+
 // StartFieldwork transitions map to fieldwork_in_progress
 func (s *MapService) StartFieldwork(ctx context.Context, id uuid.UUID, role string) error {
 	if role != "survey_expert" {

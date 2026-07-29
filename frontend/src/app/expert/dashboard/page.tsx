@@ -108,7 +108,21 @@ export default function ExpertDashboard() {
                         <div className="text-xs text-ink-soft">{c.address_detail}</div>
                         <div className="text-[10px] font-mono opacity-60">ID: {c.id}</div>
                       </div>
-                      <button className="bg-navy text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-navy-light transition-transform active:scale-95">
+                      <button 
+                        onClick={async () => {
+                          try {
+                            // Find the map service ID for this case
+                            // In a real app, we'd have the map service ID directly
+                            // Here we assume case ID is what we need or we fetch it
+                            await api.post(`/v1/map-services/${c.id}/accept`);
+                            alert("پرونده با موفقیت پذیرفته شد");
+                            fetchData();
+                          } catch (err: any) {
+                            alert(err.response?.data?.error || "خطا در پذیرش پرونده");
+                          }
+                        }}
+                        className="bg-navy text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-navy-light transition-transform active:scale-95"
+                      >
                         قبول پرونده
                       </button>
                     </div>

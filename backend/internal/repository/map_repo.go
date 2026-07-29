@@ -98,6 +98,37 @@ func (r *PostgresMapServiceRepo) VerifyConsent(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+func (r *PostgresMapServiceRepo) AssignExpert(ctx context.Context, id uuid.UUID, expertID uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Update map_services status
+	tag, err := tx.Exec(ctx, `
+		UPDATE map_services SET status = 'expert_assigned', updated_at = NOW()
+		WHERE id = $1 AND status::text = 'pending_expert_assignment'
+	`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("سرویس نقشه در وضعیت منتظر تخصیص نیست")
+	}
+
+	// 2. Update case with expert ID
+	_, err = tx.Exec(ctx, `
+		UPDATE cases SET survey_expert_id = $2, updated_at = NOW()
+		WHERE id = (SELECT case_id FROM map_services WHERE id = $1)
+	`, id, expertID)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *PostgresMapServiceRepo) SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error {
 	tag, err := r.db.Exec(ctx, `
 		UPDATE map_services SET

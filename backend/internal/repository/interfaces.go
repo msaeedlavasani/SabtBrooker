@@ -31,6 +31,7 @@ type MapServiceRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*MapService, error)
 	RequestConsent(ctx context.Context, id uuid.UUID) error
 	VerifyConsent(ctx context.Context, id uuid.UUID) error
+	AssignExpert(ctx context.Context, id uuid.UUID, expertID uuid.UUID) error
 	SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error
 	SubmitToOrg(ctx context.Context, id uuid.UUID, status string) (caseID uuid.UUID, trackingCode string, err error)
 }
