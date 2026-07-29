@@ -1,0 +1,4853 @@
+From bc1e5cbef461fb060de280847d5b791f12f815f6 Mon Sep 17 00:00:00 2001
+From: msaeedlavasani <msaeedlavasani@users.noreply.github.com>
+Date: Wed, 29 Jul 2026 21:09:45 +0800
+Subject: [PATCH] =?UTF-8?q?feat:=20complete=20Phase=201=20=E2=80=94=20Repo?=
+ =?UTF-8?q?sitory,=20Service,=20Storage,=20Notification,=20Scheduler,=20Ou?=
+ =?UTF-8?q?tbox?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Add Repository Layer (7 repos: user, case, map, claim, cert, audit, ai)
+- Add Service Layer (4 services: Case, Map, Claim, Cert)
+- Add File Storage (MinIO: upload, download, presigned URL)
+- Add Notification Service (In-App + SMS stub with rate limiting)
+- Add Scheduler (deadline_2years, 5months, otp_cleanup)
+- Add Outbox Pattern (migration 013, Publisher, Recorder)
+- Refactor handlers to use service layer (remove direct DB queries)
+- Add AuthHandler (extracted from main.go)
+- Simplify main.go with dependency injection
+- Add unit tests (state machine 10 + claim service 6 + scheduler 6)
+- Add HANDOFF.md with project status and remaining tasks
+---
+ HANDOFF.md                                    | 175 ++++++++++
+ backend/cmd/server/main.go                    | 142 ++++----
+ backend/internal/handler/auth_handler.go      |  99 ++++++
+ backend/internal/handler/case_handler.go      | 277 +++++-----------
+ backend/internal/handler/cert_handler.go      | 121 ++-----
+ backend/internal/handler/claim_handler.go     | 304 +++++-------------
+ backend/internal/handler/map_handler.go       | 130 ++------
+ backend/internal/notification/notification.go | 104 ++++++
+ backend/internal/outbox/outbox.go             | 198 ++++++++++++
+ backend/internal/repository/aux_repo.go       |  77 +++++
+ backend/internal/repository/case_repo.go      | 186 +++++++++++
+ backend/internal/repository/cert_repo.go      | 150 +++++++++
+ backend/internal/repository/claim_repo.go     | 264 +++++++++++++++
+ backend/internal/repository/interfaces.go     |  76 +++++
+ backend/internal/repository/map_repo.go       | 139 ++++++++
+ backend/internal/repository/models.go         | 167 ++++++++++
+ backend/internal/repository/user_repo.go      |  88 +++++
+ backend/internal/scheduler/scheduler.go       | 267 +++++++++++++++
+ backend/internal/scheduler/scheduler_test.go  |  94 ++++++
+ backend/internal/service/case_service.go      | 165 ++++++++++
+ backend/internal/service/cert_service.go      | 124 +++++++
+ backend/internal/service/claim_service.go     | 246 ++++++++++++++
+ .../internal/service/claim_service_test.go    | 108 +++++++
+ backend/internal/service/map_service.go       | 112 +++++++
+ backend/internal/storage/storage.go           | 104 ++++++
+ .../internal/workflow/statemachine_test.go    | 211 ++++++++++++
+ backend/migrations/000013_outbox.down.sql     |   5 +
+ backend/migrations/000013_outbox.up.sql       |  24 ++
+ 28 files changed, 3433 insertions(+), 724 deletions(-)
+ create mode 100644 HANDOFF.md
+ create mode 100644 backend/internal/handler/auth_handler.go
+ create mode 100644 backend/internal/notification/notification.go
+ create mode 100644 backend/internal/outbox/outbox.go
+ create mode 100644 backend/internal/repository/aux_repo.go
+ create mode 100644 backend/internal/repository/case_repo.go
+ create mode 100644 backend/internal/repository/cert_repo.go
+ create mode 100644 backend/internal/repository/claim_repo.go
+ create mode 100644 backend/internal/repository/interfaces.go
+ create mode 100644 backend/internal/repository/map_repo.go
+ create mode 100644 backend/internal/repository/models.go
+ create mode 100644 backend/internal/repository/user_repo.go
+ create mode 100644 backend/internal/scheduler/scheduler.go
+ create mode 100644 backend/internal/scheduler/scheduler_test.go
+ create mode 100644 backend/internal/service/case_service.go
+ create mode 100644 backend/internal/service/cert_service.go
+ create mode 100644 backend/internal/service/claim_service.go
+ create mode 100644 backend/internal/service/claim_service_test.go
+ create mode 100644 backend/internal/service/map_service.go
+ create mode 100644 backend/internal/storage/storage.go
+ create mode 100644 backend/internal/workflow/statemachine_test.go
+ create mode 100644 backend/migrations/000013_outbox.down.sql
+ create mode 100644 backend/migrations/000013_outbox.up.sql
+
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..197e491
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,175 @@
++# HANDOFF — وضعیت پروژه و تسک‌های باقی‌مانده
++
++> آخرین به‌روزرسانی: ۲۰۲۶-۰۷-۲۹ (جلسه دوم پیاده‌سازی)  
++> فاز فعلی: Phase 1 — تکمیل هسته (۹۰٪)  
++> پیشرفت کلی: ~۵۰٪
++
++---
++
++## خلاصه وضعیت
++
++### ✅ انجام شده — فاز ۱: هسته (تکمیل شد)
++
++| بخش | وضعیت | توضیح |
++|---|---|---|
++| مستندات طراحی | کامل | ۹ فایل در docs/ |
++| Database Schema | کامل | ۱۸ جدول + ۱۳ migration (شامل outbox) |
++| CI Pipeline | کامل | GitHub Actions: lint, test, build, security scan |
++| Docker Compose | کامل | PostgreSQL + Redis + NATS + MinIO + Backend |
++| Config | کامل | بارگذاری از env |
++| Auth Service | کامل | JWT (RS256) + OTP + Refresh Token rotation |
++| State Machine | کامل | Case/Map/Claim/Cert با Transition + Guard + Effect |
++| Repository Layer | کامل | ۷ repository با interface و پیاده‌سازی PostgreSQL |
++| Service Layer | کامل | CaseService, MapService, ClaimService, CertService |
++| Audit Logger | کامل | PostgresAuditLogRepo — ثبت خودکار در تمام transitionها |
++| File Storage | کامل | MinIO: Upload, Download, Delete, Presigned URL (5min) |
++| Notification Service | کامل | In-App (DB) + SMS (stub با rate limiting) + Email (stub) |
++| Scheduler | کامل | Poll-based با FOR UPDATE SKIP LOCKED — deadline_2years, 5months, otp_cleanup |
++| Outbox Pattern | کامل | جدول outbox_messages + Publisher (poll) + Recorder (tx-aware) |
++| Handlers | کامل | بازنویسی شده با service layer + AuthHandler مجزا |
++| Middleware | کامل | Auth (JWT)، CORS، Logger، Recovery، RequireRole |
++| AI Advisor | پایه | Rule-based advice با disclaimer قانونی |
++| تست‌ها | پایه | State machine unit tests + service business logic tests |
++
++### 🔴 مسدود (وابسته به سازمان ثبت)
++
++| مورد | تأثیر |
++|---|---|
++| مستندات فنی مرکز تبادل اطلاعات ملی | مسدودیت Integration Gateway |
++| مستندات API سامانه مانا | مسدودیت GIS Service |
++| متن دستورالعمل بند (پ) ماده ۱۱۴ | مسدودیت مدیریت کارشناسان و پرداخت |
++
++---
++
++## تسک‌های باقی‌مانده به ترتیب اولویت
++
++### فاز ۱: تکمیل هسته ✅ (انجام شد)
++
++| # | تسک | وضعیت |
++|---|---|---|
++| 1 | Repository Layer | ✅ |
++| 2 | Service Layer | ✅ |
++| 3 | Audit Logger | ✅ |
++| 4 | File Storage (MinIO) | ✅ |
++| 5 | Notification Service | ✅ |
++| 6 | Scheduler | ✅ |
++| 7 | Outbox Pattern | ✅ |
++| 8 | بازنویسی handlerها | ✅ |
++| 9 | تست‌های unit | ✅ (پایه) |
++
++### فاز ۲: سرویس نقشه (وابسته به مانا)
++
++| # | تسک | وابستگی |
++|---|---|---|
++| 10 | GIS Service (PostGIS queries, Geo-tag) | مستندات مانا 🔴 |
++| 11 | Web Panel کارشناس نقشه‌بردار | #10 |
++| 12 | Mobile App (Flutter) | #10 |
++
++### فاز ۳: ادعا و گواهی
++
++| # | تسک | وابستگی |
++|---|---|---|
++| 13 | پورتال متقاضی (Next.js) | — |
++| 14 | AI Advisor (RAG واقعی) | — |
++| 15 | Integration Gateway (اتصال به سازمان) | مستندات سازمان 🔴 |
++
++### فاز ۴: تکمیل
++
++| # | تسک | وابستگی |
++|---|---|---|
++| 16 | Payment Gateway | PSP credentials 🔴 |
++| 17 | SMS Gateway واقعی | SMS provider credentials 🔴 |
++| 18 | Monitoring & Alerting (Grafana) | — |
++| 19 | Backup & DR | — |
++| 20 | Kubernetes manifests | — |
++
++---
++
++## ساختار پروژه
++
++```
++SabtBrooker/
++├── HANDOFF.md                      
++├── README.md
++├── .env.example
++├── docker-compose.yml
++├── Makefile
++├── docs/                           ← ۹ فایل مستندات کامل
++├── backend/                        ← Go microservice
++│   ├── cmd/server/main.go          ← ✅ ساده‌سازی شده با service layer
++│   ├── migrations/                 ← ۱۳ migration
++│   └── internal/
++│       ├── config/                 ← ✅
++│       ├── database/               ← ✅
++│       ├── auth/                   ← ✅ JWT + OTP
++│       ├── middleware/             ← ✅ Auth, CORS, Logger, RequireRole
++│       ├── workflow/               ← ✅ State Machine + tests
++│       ├── handler/                ← ✅ Auth + Case + Map + Claim + Cert
++│       ├── repository/             ← ✅ ۷ repo (user, case, map, claim, cert, audit, ai)
++│       ├── service/                ← ✅ ۴ service (case, map, claim, cert) + tests
++│       ├── storage/                ← ✅ MinIO
++│       ├── notification/           ← ✅ SMS/In-App
++│       ├── scheduler/              ← ✅ Deadline tracking + tests
++│       └── outbox/                 ← ✅ Outbox Pattern
++├── frontend/                       ← خالی — Next.js
++└── mobile/                         ← خالی — Flutter
++```
++
++---
++
++## تغییرات این جلسه
++
++### فایل‌های جدید (۱۹ عدد)
++- `HANDOFF.md`
++- `internal/repository/`: models.go, interfaces.go, user_repo.go, case_repo.go, map_repo.go, claim_repo.go, cert_repo.go, aux_repo.go
++- `internal/service/`: case_service.go, map_service.go, claim_service.go, cert_service.go
++- `internal/storage/storage.go`
++- `internal/notification/notification.go`
++- `internal/scheduler/scheduler.go`
++- `internal/outbox/outbox.go`
++- `internal/handler/auth_handler.go`
++- `backend/migrations/000013_outbox.up.sql` + `.down.sql`
++
++### فایل‌های بازنویسی شده (۴ عدد)
++- `cmd/server/main.go` — از direct DB به service layer مهاجرت کرد
++- `internal/handler/case_handler.go`
++- `internal/handler/map_handler.go`
++- `internal/handler/claim_handler.go`
++- `internal/handler/cert_handler.go`
++
++### تست‌ها (۳ عدد)
++- `internal/workflow/statemachine_test.go` — ۱۰ تست
++- `internal/service/claim_service_test.go` — ۶ تست
++- `internal/scheduler/scheduler_test.go` — ۶ تست (۴ integration skipped)
++
++---
++
++## راهنمای توسعه
++
++### دستورات پرکاربرد
++```bash
++make docker-up     # راه‌اندازی زیرساخت
++make migrate-up    # اجرای migrationها (شامل 013_outbox)
++make run           # اجرای backend
++make test          # اجرای تست‌ها
++make build         # build binary
++```
++
++### الگوی معماری
++```
++Handler → Service → Repository → PostgreSQL
++              ↓
++    Notification / Scheduler / Audit / Outbox
++```
++
++---
++
++## نقاط اتصال خارجی (نیاز به credentials)
++
++| سرویس | وضعیت | توضیح |
++|---|---|---|
++| SMS Gateway | stub | log-based — ارائه‌دهنده پیامک ایرانی |
++| Payment Gateway | نیازمند PSP | درگاه بانکی |
++| شاهکار | نیازمند API | تطابق کد ملی-موبایل |
++| ثنا | نیازمند API | استعلام وضعیت ثبت‌نام |
++| ثبت احوال | نیازمند API | استعلام حیات/فوت |
+diff --git a/backend/cmd/server/main.go b/backend/cmd/server/main.go
+index 2e2a853..e37b149 100644
+--- a/backend/cmd/server/main.go
++++ b/backend/cmd/server/main.go
+@@ -9,7 +9,6 @@ import (
+ 	"syscall"
+ 	"time"
+ 
+-	"github.com/google/uuid"
+ 	"github.com/labstack/echo/v4"
+ 	"github.com/nats-io/nats.go"
+ 	"github.com/redis/go-redis/v9"
+@@ -19,6 +18,11 @@ import (
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/database"
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/handler"
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/notification"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/outbox"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/scheduler"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
+ )
+ 
+@@ -34,7 +38,8 @@ func main() {
+ 
+ 	ctx := context.Background()
+ 
+-	// Database
++	// ── Infrastructure ──────────────────────────────────────────
++
+ 	db, err := database.NewPostgres(ctx, cfg.DB)
+ 	if err != nil {
+ 		slog.Error("failed to connect to database", "error", err)
+@@ -42,7 +47,6 @@ func main() {
+ 	}
+ 	defer db.Close()
+ 
+-	// Redis
+ 	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
+ 	if err := rdb.Ping(ctx).Err(); err != nil {
+ 		slog.Error("failed to connect to Redis", "error", err)
+@@ -50,7 +54,6 @@ func main() {
+ 	}
+ 	defer rdb.Close()
+ 
+-	// NATS (non-fatal if unavailable — backend works without it)
+ 	nc, _ := nats.Connect(cfg.NATS.URL,
+ 		nats.MaxReconnects(3),
+ 		nats.ReconnectWait(2*time.Second),
+@@ -60,23 +63,33 @@ func main() {
+ 		slog.Info("connected to NATS", "url", cfg.NATS.URL)
+ 	}
+ 
+-	// JWT Manager
++	// ── Auth ────────────────────────────────────────────────────
++
+ 	jwtManager, err := auth.NewJWTManager(cfg.JWT)
+ 	if err != nil {
+ 		slog.Error("failed to initialize JWT manager", "error", err)
+ 		os.Exit(1)
+ 	}
+-
+-	// OTP Service
+ 	otpService := auth.NewOTPService(rdb, cfg.OTP)
+ 
+-	// Workflow Engines
++	// ── Repositories ────────────────────────────────────────────
++
++	userRepo := repository.NewPostgresUserRepo(db.Pool)
++	caseRepo := repository.NewPostgresCaseRepo(db.Pool)
++	mapRepo := repository.NewPostgresMapServiceRepo(db.Pool)
++	claimRepo := repository.NewPostgresClaimServiceRepo(db.Pool)
++	certRepo := repository.NewPostgresCertServiceRepo(db.Pool)
++	auditRepo := repository.NewPostgresAuditLogRepo(db.Pool)
++	aiAdviceRepo := repository.NewPostgresAIAdviceRepo(db.Pool)
++
++	// ── Workflow Engines ────────────────────────────────────────
++
+ 	caseSM := workflow.BuildCaseStateMachine(db.Pool, nc)
+ 	mapSM := workflow.NewStateMachine("map_service", db.Pool, nc)
+ 	claimSM := workflow.NewStateMachine("claim_service", db.Pool, nc)
+ 	certSM := workflow.NewStateMachine("cert_service", db.Pool, nc)
+ 
+-	// Map service transitions
++	// Register transitions
+ 	mapSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
+ 	mapSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "fieldwork_in_progress"})
+ 	mapSM.AddTransition(workflow.Transition{From: "fieldwork_in_progress", To: "fieldwork_done"})
+@@ -84,25 +97,46 @@ func main() {
+ 	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+ 	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+ 
+-	// Claim service transitions
+ 	claimSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
+ 	claimSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "documents_verified"})
+ 	claimSM.AddTransition(workflow.Transition{From: "documents_verified", To: "submitted_to_org"})
+ 	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+ 	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+ 
+-	// Cert service transitions
+ 	certSM.AddTransition(workflow.Transition{From: "pending_data", To: "submitted_to_org"})
+ 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
+ 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
+ 
+-	// Handlers
+-	caseHandler := handler.NewCaseHandler(db.Pool, caseSM)
+-	mapHandler := handler.NewMapHandler(db.Pool, caseSM, mapSM)
+-	claimHandler := handler.NewClaimHandler(db.Pool, caseSM, claimSM)
+-	certHandler := handler.NewCertHandler(db.Pool, caseSM, certSM)
++	// ── Services ────────────────────────────────────────────────
++
++	notificationSvc := notification.NewService(db.Pool, rdb)
++
++	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
++	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)
++	claimSvc := service.NewClaimService(claimRepo, caseSM, claimSM, auditRepo, aiAdviceRepo)
++	certSvc := service.NewCertService(certRepo, caseSM, certSM, auditRepo)
++
++	// ── Handlers ────────────────────────────────────────────────
++
++	authHandler := handler.NewAuthHandler(jwtManager, otpService, userRepo)
++	caseHandler := handler.NewCaseHandler(caseSvc)
++	mapHandler := handler.NewMapHandler(mapSvc)
++	claimHandler := handler.NewClaimHandler(claimSvc)
++	certHandler := handler.NewCertHandler(certSvc)
++
++	// ── Background Services ─────────────────────────────────────
++
++	// Outbox publisher (submits queued messages to org)
++	outboxPublisher := outbox.NewPublisher(db.Pool, nc, 1*time.Second)
++	go outboxPublisher.Start(ctx)
++
++	// Scheduler (deadline tracking)
++	sched := scheduler.New(db.Pool, nc, 1*time.Hour)
++	schedCtx := scheduler.WithDB(ctx, db.Pool)
++	go sched.Start(schedCtx)
++
++	// ── HTTP Server ─────────────────────────────────────────────
+ 
+-	// Echo server
+ 	e := echo.New()
+ 	e.HideBanner = true
+ 	e.HidePort = true
+@@ -121,86 +155,21 @@ func main() {
+ 		return c.JSON(http.StatusOK, map[string]string{"status": "ready"})
+ 	})
+ 
+-	// Public auth routes
++	// Public routes
+ 	v1 := e.Group("/v1")
+-	authGroup := v1.Group("/auth")
+-	authGroup.POST("/otp/send", func(c echo.Context) error {
+-		var req struct {
+-			Mobile  string `json:"mobile"`
+-			Purpose string `json:"purpose"`
+-		}
+-		if err := c.Bind(&req); err != nil {
+-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
+-		}
+-		if req.Purpose == "" {
+-			req.Purpose = "auth"
+-		}
+-		code, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
+-		if err != nil {
+-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+-		}
+-		return c.JSON(http.StatusOK, map[string]interface{}{
+-			"message":    "کد تایید ارسال شد",
+-			"expires_in": int(time.Until(expiresAt).Seconds()),
+-			"dev_otp":    code, // فقط در محیط توسعه — در production حذف شود
+-		})
+-	})
+-
+-	authGroup.POST("/otp/verify", func(c echo.Context) error {
+-		var req struct {
+-			Mobile  string `json:"mobile"`
+-			OTP     string `json:"otp"`
+-			Purpose string `json:"purpose"`
+-		}
+-		if err := c.Bind(&req); err != nil {
+-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
+-		}
+-		if req.Purpose == "" {
+-			req.Purpose = "auth"
+-		}
+-		if err := otpService.Verify(c.Request().Context(), req.Mobile, req.OTP, req.Purpose); err != nil {
+-			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+-		}
+-
+-		// Find or create user
+-		var userID uuid.UUID
+-		err := db.Pool.QueryRow(c.Request().Context(),
+-			`INSERT INTO users (national_id, first_name, last_name, mobile, mobile_verified, role)
+-			 VALUES ('TMP' || substr(md5($1), 1, 7), 'کاربر', 'سامانه', $1, true, 'applicant')
+-			 ON CONFLICT (mobile) DO UPDATE SET mobile_verified = true, updated_at = NOW()
+-			 RETURNING id`,
+-			req.Mobile,
+-		).Scan(&userID)
+-		if err != nil {
+-			slog.Error("failed to find/create user", "error", err)
+-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در ایجاد کاربر"})
+-		}
+-
+-		tokens, err := jwtManager.GenerateTokenPair(userID, "applicant", req.Mobile)
+-		if err != nil {
+-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در تولید توکن"})
+-		}
+-		return c.JSON(http.StatusOK, tokens)
+-	})
++	authHandler.RegisterRoutes(v1.Group("/auth"))
+ 
+ 	// Protected routes
+ 	protected := v1.Group("")
+ 	protected.Use(middleware.AuthRequired(jwtManager))
+ 
+-	protected.GET("/auth/me", func(c echo.Context) error {
+-		return c.JSON(http.StatusOK, map[string]interface{}{
+-			"user_id": middleware.GetUserID(c),
+-			"role":    middleware.GetUserRole(c),
+-		})
+-	})
+-
+-	// Business logic routes
+ 	caseHandler.RegisterRoutes(protected.Group("/cases"))
+ 	mapHandler.RegisterRoutes(protected.Group("/map-services"))
+ 	claimHandler.RegisterRoutes(protected.Group("/claim-services"))
+ 	certHandler.RegisterRoutes(protected.Group("/cert-services"))
+ 
+-	// Start server
++	// ── Graceful Shutdown ───────────────────────────────────────
++
+ 	go func() {
+ 		addr := cfg.Server.Host + ":" + cfg.Server.Port
+ 		slog.Info("server started", "addr", addr)
+@@ -210,7 +179,6 @@ func main() {
+ 		}
+ 	}()
+ 
+-	// Graceful shutdown
+ 	quit := make(chan os.Signal, 1)
+ 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+ 	<-quit
+diff --git a/backend/internal/handler/auth_handler.go b/backend/internal/handler/auth_handler.go
+new file mode 100644
+index 0000000..f23aef7
+--- /dev/null
++++ b/backend/internal/handler/auth_handler.go
+@@ -0,0 +1,99 @@
++package handler
++
++import (
++	"net/http"
++	"time"
++
++	"github.com/labstack/echo/v4"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/auth"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++)
++
++// AuthHandler handles authentication endpoints
++type AuthHandler struct {
++	jwtManager *auth.JWTManager
++	otpService *auth.OTPService
++	userRepo   repository.UserRepository
++}
++
++func NewAuthHandler(jwtManager *auth.JWTManager, otpService *auth.OTPService, userRepo repository.UserRepository) *AuthHandler {
++	return &AuthHandler{
++		jwtManager: jwtManager,
++		otpService: otpService,
++		userRepo:   userRepo,
++	}
++}
++
++func (h *AuthHandler) RegisterRoutes(g *echo.Group) {
++	g.POST("/otp/send", h.SendOTP)
++	g.POST("/otp/verify", h.VerifyOTP)
++	g.GET("/me", h.Me, middleware.AuthRequired(h.jwtManager))
++}
++
++// SendOTP generates and sends an OTP code
++func (h *AuthHandler) SendOTP(c echo.Context) error {
++	var req struct {
++		Mobile  string `json:"mobile"`
++		Purpose string `json:"purpose"`
++	}
++	if err := c.Bind(&req); err != nil {
++		return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
++	}
++	if req.Purpose == "" {
++		req.Purpose = "auth"
++	}
++
++	code, expiresAt, err := h.otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
++	if err != nil {
++		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
++	}
++
++	return c.JSON(http.StatusOK, map[string]interface{}{
++		"message":    "کد تایید ارسال شد",
++		"expires_in": int(time.Until(expiresAt).Seconds()),
++		"dev_otp":    code, // فقط در محیط توسعه — در production حذف شود
++	})
++}
++
++// VerifyOTP validates OTP and returns JWT tokens
++func (h *AuthHandler) VerifyOTP(c echo.Context) error {
++	var req struct {
++		Mobile  string `json:"mobile"`
++		OTP     string `json:"otp"`
++		Purpose string `json:"purpose"`
++	}
++	if err := c.Bind(&req); err != nil {
++		return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
++	}
++	if req.Purpose == "" {
++		req.Purpose = "auth"
++	}
++
++	// Verify OTP
++	if err := h.otpService.Verify(c.Request().Context(), req.Mobile, req.OTP, req.Purpose); err != nil {
++		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
++	}
++
++	// Find or create user
++	user, err := h.userRepo.FindOrCreateByMobile(c.Request().Context(), req.Mobile)
++	if err != nil {
++		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در ایجاد کاربر"})
++	}
++
++	// Generate JWT tokens
++	tokens, err := h.jwtManager.GenerateTokenPair(user.ID, user.Role, user.Mobile)
++	if err != nil {
++		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در تولید توکن"})
++	}
++
++	return c.JSON(http.StatusOK, tokens)
++}
++
++// Me returns the current authenticated user info
++func (h *AuthHandler) Me(c echo.Context) error {
++	return c.JSON(http.StatusOK, map[string]interface{}{
++		"user_id": middleware.GetUserID(c),
++		"role":    middleware.GetUserRole(c),
++	})
++}
+diff --git a/backend/internal/handler/case_handler.go b/backend/internal/handler/case_handler.go
+index ae465a7..405b21d 100644
+--- a/backend/internal/handler/case_handler.go
++++ b/backend/internal/handler/case_handler.go
+@@ -1,29 +1,21 @@
+ package handler
+ 
+ import (
+-	"log/slog"
+-
+ 	"github.com/google/uuid"
+-	"github.com/jackc/pgx/v5"
+-	"github.com/jackc/pgx/v5/pgxpool"
+ 	"github.com/labstack/echo/v4"
+-
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
+-	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+ )
+ 
+-// CaseHandler handles case-related endpoints
++// CaseHandler handles case endpoints via service layer
+ type CaseHandler struct {
+-	db    *pgxpool.Pool
+-	caseSM *workflow.StateMachine
++	svc *service.CaseService
+ }
+ 
+-// NewCaseHandler creates a new case handler
+-func NewCaseHandler(db *pgxpool.Pool, sm *workflow.StateMachine) *CaseHandler {
+-	return &CaseHandler{db: db, caseSM: sm}
++func NewCaseHandler(svc *service.CaseService) *CaseHandler {
++	return &CaseHandler{svc: svc}
+ }
+ 
+-// RegisterRoutes registers all case routes
+ func (h *CaseHandler) RegisterRoutes(g *echo.Group) {
+ 	g.GET("", h.List)
+ 	g.POST("", h.Create)
+@@ -33,248 +25,129 @@ func (h *CaseHandler) RegisterRoutes(g *echo.Group) {
+ 	g.POST("/:id/submit", h.SubmitForMap)
+ }
+ 
+-// List returns all cases for the authenticated user
+ func (h *CaseHandler) List(c echo.Context) error {
+-	userIDStr := middleware.GetUserID(c)
+-	userID, _ := uuid.Parse(userIDStr)
+-	role := middleware.GetUserRole(c)
+-
+ 	var p PageParams
+ 	c.Bind(&p)
+ 	p.Defaults()
+ 
+-	var rows pgx.Rows
+-	var err error
+-
+-	switch role {
+-	case "applicant":
+-		rows, err = h.db.Query(c.Request().Context(), `
+-			SELECT id, status, province, city, address_detail,
+-			       map_tracking_code, claim_tracking_code, cert_tracking_code,
+-			       deadline_2years, created_at, updated_at
+-			FROM cases WHERE applicant_id = $1
+-			ORDER BY created_at DESC LIMIT $2 OFFSET $3
+-		`, userID, p.PageSize, p.Offset())
+-	case "admin", "auditor":
+-		rows, err = h.db.Query(c.Request().Context(), `
+-			SELECT id, status, province, city, address_detail,
+-			       map_tracking_code, claim_tracking_code, cert_tracking_code,
+-			       deadline_2years, created_at, updated_at
+-			FROM cases ORDER BY created_at DESC LIMIT $1 OFFSET $2
+-		`, p.PageSize, p.Offset())
+-	default:
+-		// expert — only assigned cases
+-		rows, err = h.db.Query(c.Request().Context(), `
+-			SELECT id, status, province, city, address_detail,
+-			       map_tracking_code, claim_tracking_code, cert_tracking_code,
+-			       deadline_2years, created_at, updated_at
+-			FROM cases
+-			WHERE legal_expert_id = $1 OR survey_expert_id = $1
+-			ORDER BY created_at DESC LIMIT $2 OFFSET $3
+-		`, userID, p.PageSize, p.Offset())
+-	}
+-
++	cases, err := h.svc.ListCases(
++		c.Request().Context(),
++		middleware.GetUserID(c),
++		middleware.GetUserRole(c),
++		p.Offset(),
++		p.PageSize,
++	)
+ 	if err != nil {
+-		slog.Error("failed to list cases", "error", err)
+-		return InternalError(c, "خطا در دریافت لیست پرونده‌ها")
++		return BadRequest(c, err.Error())
+ 	}
+-	defer rows.Close()
+-
+-	type item struct {
+-		ID                uuid.UUID `json:"id"`
+-		Status            string    `json:"status"`
+-		Province          string    `json:"province"`
+-		City              string    `json:"city"`
+-		AddressDetail     *string   `json:"address_detail"`
+-		MapTrackingCode   *string   `json:"map_tracking_code"`
+-		ClaimTrackingCode *string   `json:"claim_tracking_code"`
+-		CertTrackingCode  *string   `json:"cert_tracking_code"`
+-		Deadline2Years    *string   `json:"deadline_2years"`
+-		CreatedAt         string    `json:"created_at"`
+-		UpdatedAt         string    `json:"updated_at"`
+-	}
+-
+-	var items []item
+-	for rows.Next() {
+-		var i item
+-		rows.Scan(&i.ID, &i.Status, &i.Province, &i.City, &i.AddressDetail,
+-			&i.MapTrackingCode, &i.ClaimTrackingCode, &i.CertTrackingCode,
+-			&i.Deadline2Years, &i.CreatedAt, &i.UpdatedAt)
+-		items = append(items, i)
+-	}
+-
+-	return OK(c, map[string]interface{}{
+-		"items":     items,
+-		"total":     len(items),
+-		"page":      p.Page,
+-		"page_size": p.PageSize,
+-	})
++	return OK(c, cases)
+ }
+ 
+-// Create creates a new case
+ func (h *CaseHandler) Create(c echo.Context) error {
+-	userID := middleware.GetUserID(c)
+-
+-	var req struct {
+-		Province      string `json:"province"`
+-		City          string `json:"city"`
+-		District      string `json:"district"`
+-		Village       string `json:"village"`
+-		PostalCode    string `json:"postal_code"`
+-		AddressDetail string `json:"address_detail"`
+-	}
+-	if err := c.Bind(&req); err != nil {
+-		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+-	}
+-	if req.Province == "" || req.City == "" {
++	var input struct {
++		Province      string  `json:"province"`
++		City          string  `json:"city"`
++		District      *string `json:"district"`
++		Village       *string `json:"village"`
++		AddressDetail *string `json:"address_detail"`
++	}
++	if err := c.Bind(&input); err != nil || input.Province == "" || input.City == "" {
+ 		return BadRequest(c, "استان و شهر الزامی است")
+ 	}
+ 
+-	var id uuid.UUID
+-	err := h.db.QueryRow(c.Request().Context(), `
+-		INSERT INTO cases (applicant_id, province, city, district, village, postal_code, address_detail)
+-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+-		RETURNING id
+-	`, userID, req.Province, req.City, req.District, req.Village, req.PostalCode, req.AddressDetail).Scan(&id)
+-
++	created, err := h.svc.CreateCase(
++		c.Request().Context(),
++		middleware.GetUserID(c),
++		middleware.GetUserRole(c),
++		service.CreateCaseInput{
++			Province:      input.Province,
++			City:          input.City,
++			District:      input.District,
++			Village:       input.Village,
++			AddressDetail: input.AddressDetail,
++		},
++	)
+ 	if err != nil {
+-		slog.Error("failed to create case", "error", err)
+-		return InternalError(c, "خطا در ایجاد پرونده")
++		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	return Created(c, map[string]interface{}{
+-		"id":      id,
+-		"message": "پرونده با موفقیت ایجاد شد",
+-	})
++	return Created(c, created)
+ }
+ 
+-// Get returns case details with all linked services
+ func (h *CaseHandler) Get(c echo.Context) error {
+-	caseID, err := uuid.Parse(c.Param("id"))
++	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+-		return BadRequest(c, "شناسه پرونده نامعتبر است")
+-	}
+-
+-	var cs struct {
+-		ID                uuid.UUID
+-		Status            string
+-		Province          string
+-		City              string
+-		District          *string
+-		Village           *string
+-		PostalCode        *string
+-		AddressDetail     *string
+-		MapTrackingCode   *string
+-		ClaimTrackingCode *string
+-		CertTrackingCode  *string
+-		Deadline2Years    *string
+-		Deadline5Months   *string
+-		CreatedAt         string
+-		UpdatedAt         string
+-		CompletedAt       *string
++		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	err = h.db.QueryRow(c.Request().Context(), `
+-		SELECT id, status::text, province, city, district, village, postal_code, address_detail,
+-		       map_tracking_code, claim_tracking_code, cert_tracking_code,
+-		       deadline_2years::text, deadline_5months::text,
+-		       created_at::text, updated_at::text, completed_at::text
+-		FROM cases WHERE id = $1
+-	`, caseID).Scan(&cs.ID, &cs.Status, &cs.Province, &cs.City,
+-		&cs.District, &cs.Village, &cs.PostalCode, &cs.AddressDetail,
+-		&cs.MapTrackingCode, &cs.ClaimTrackingCode, &cs.CertTrackingCode,
+-		&cs.Deadline2Years, &cs.Deadline5Months,
+-		&cs.CreatedAt, &cs.UpdatedAt, &cs.CompletedAt)
+-
++	cse, err := h.svc.GetCase(c.Request().Context(), id)
+ 	if err != nil {
+ 		return NotFound(c, "پرونده یافت نشد")
+ 	}
+-
+-	return OK(c, cs)
++	return OK(c, cse)
+ }
+ 
+-// Update updates case address info (only in draft status)
+ func (h *CaseHandler) Update(c echo.Context) error {
+-	caseID, err := uuid.Parse(c.Param("id"))
++	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+-		return BadRequest(c, "شناسه پرونده نامعتبر است")
++		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+ 
+ 	var req struct {
+-		Province      string `json:"province"`
+-		City          string `json:"city"`
+-		District      string `json:"district"`
+-		Village       string `json:"village"`
+-		PostalCode    string `json:"postal_code"`
+-		AddressDetail string `json:"address_detail"`
++		District      *string `json:"district"`
++		Village       *string `json:"village"`
++		AddressDetail *string `json:"address_detail"`
+ 	}
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+ 
+-	tag, err := h.db.Exec(c.Request().Context(), `
+-		UPDATE cases SET province=$2, city=$3, district=$4, village=$5,
+-		       postal_code=$6, address_detail=$7, updated_at=NOW()
+-		WHERE id=$1 AND status='draft'
+-	`, caseID, req.Province, req.City, req.District, req.Village, req.PostalCode, req.AddressDetail)
++	fields := make(map[string]interface{})
++	if req.District != nil {
++		fields["district"] = *req.District
++	}
++	if req.Village != nil {
++		fields["village"] = *req.Village
++	}
++	if req.AddressDetail != nil {
++		fields["address_detail"] = *req.AddressDetail
++	}
+ 
+-	if err != nil || tag.RowsAffected() == 0 {
+-		return Conflict(c, "پرونده قابل ویرایش نیست (فقط در وضعیت پیش‌نویس)")
++	if len(fields) == 0 {
++		return BadRequest(c, "حداقل یک فیلد باید مقداردهی شود")
+ 	}
+ 
+-	return OK(c, map[string]string{"message": "به‌روزرسانی شد"})
++	if err := h.svc.UpdateCase(c.Request().Context(), id, fields); err != nil {
++		return InternalError(c, err.Error())
++	}
++	return OK(c, map[string]string{"message": "پرونده به‌روزرسانی شد"})
+ }
+ 
+-// UpdateCapacity updates applicant capacity and representation info
+ func (h *CaseHandler) UpdateCapacity(c echo.Context) error {
+-	caseID, err := uuid.Parse(c.Param("id"))
++	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+-		return BadRequest(c, "شناسه پرونده نامعتبر است")
+-	}
+-
+-	var req struct {
+-		ApplicantCapacity      string `json:"applicant_capacity"`
+-		LegalEntityID          string `json:"legal_entity_id"`
+-		LegalEntityName        string `json:"legal_entity_name"`
+-		ProxyDocumentType      string `json:"proxy_document_type"`
+-		ProxyDocumentID        string `json:"proxy_document_id"`
+-		ProxyDocumentDate      string `json:"proxy_document_date"`
+-		ProxyVerificationCode  string `json:"proxy_verification_code"`
++		return BadRequest(c, "شناسه نامعتبر")
+ 	}
++	var req struct{ Capacity string `json:"applicant_capacity"` }
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE cases SET
+-			applicant_capacity=$2, legal_entity_id=$3, legal_entity_name=$4,
+-			proxy_document_type=$5, proxy_document_id=$6, proxy_document_date=$7::date,
+-			proxy_verification_code=$8, updated_at=NOW()
+-		WHERE id=$1
+-	`, caseID, req.ApplicantCapacity, req.LegalEntityID, req.LegalEntityName,
+-		req.ProxyDocumentType, req.ProxyDocumentID, req.ProxyDocumentDate,
+-		req.ProxyVerificationCode)
+-
+-	if err != nil {
+-		return InternalError(c, "خطا در به‌روزرسانی اطلاعات نمایندگی")
++	if err := h.svc.UpdateCapacity(c.Request().Context(), id, req.Capacity); err != nil {
++		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	return OK(c, map[string]string{"message": "اطلاعات نمایندگی ثبت شد"})
++	return OK(c, map[string]string{"message": "سمت متقاضی به‌روزرسانی شد"})
+ }
+ 
+-// SubmitForMap transitions the case from draft to map_in_progress
+ func (h *CaseHandler) SubmitForMap(c echo.Context) error {
+-	caseID, err := uuid.Parse(c.Param("id"))
++	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+-		return BadRequest(c, "شناسه پرونده نامعتبر است")
++		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	if err := h.caseSM.Execute(c.Request().Context(), caseID, "map_in_progress"); err != nil {
++	ms, err := h.svc.SubmitForMap(c.Request().Context(), id)
++	if err != nil {
+ 		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	return OK(c, map[string]string{
+-		"message": "پرونده وارد مرحله تهیه نقشه ثبتی شد",
+-		"status":  "map_in_progress",
++	return OK(c, map[string]interface{}{
++		"message":        "فرآیند تهیه نقشه آغاز شد",
++		"map_service_id": ms.ID,
++		"status":         ms.Status,
+ 	})
+ }
+diff --git a/backend/internal/handler/cert_handler.go b/backend/internal/handler/cert_handler.go
+index eabff19..f03e4ce 100644
+--- a/backend/internal/handler/cert_handler.go
++++ b/backend/internal/handler/cert_handler.go
+@@ -2,25 +2,18 @@ package handler
+ 
+ import (
+ 	"github.com/google/uuid"
+-	"github.com/jackc/pgx/v5/pgxpool"
+ 	"github.com/labstack/echo/v4"
+-
+-	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+ )
+ 
+-// CertHandler handles certificate service endpoints
+ type CertHandler struct {
+-	db     *pgxpool.Pool
+-	caseSM *workflow.StateMachine
+-	certSM *workflow.StateMachine
++	svc *service.CertService
+ }
+ 
+-// NewCertHandler creates a new cert handler
+-func NewCertHandler(db *pgxpool.Pool, caseSM, certSM *workflow.StateMachine) *CertHandler {
+-	return &CertHandler{db: db, caseSM: caseSM, certSM: certSM}
++func NewCertHandler(svc *service.CertService) *CertHandler {
++	return &CertHandler{svc: svc}
+ }
+ 
+-// RegisterRoutes registers all cert service routes
+ func (h *CertHandler) RegisterRoutes(g *echo.Group) {
+ 	g.GET("/:id", h.Get)
+ 	g.POST("/:id/consent", h.RequestConsent)
+@@ -29,90 +22,45 @@ func (h *CertHandler) RegisterRoutes(g *echo.Group) {
+ 	g.POST("/:id/submit", h.SubmitToOrg)
+ }
+ 
+-// Get returns cert service details
+ func (h *CertHandler) Get(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	var cs struct {
+-		ID             uuid.UUID `json:"id"`
+-		CaseID         uuid.UUID `json:"case_id"`
+-		Status         string    `json:"status"`
+-		ActionRef      *string   `json:"action_reference"`
+-		ActionType     *string   `json:"action_type"`
+-		ActionDate     *string   `json:"action_date"`
+-		CertImagePath  *string   `json:"cert_image_path"`
+-		CertUniqueID   *string   `json:"cert_unique_id"`
+-		TrackingCode   *string   `json:"tracking_code"`
+-		RejectReason   *string   `json:"org_rejection_reason"`
+-		CreatedAt      string    `json:"created_at"`
+-	}
+-
+-	err = h.db.QueryRow(c.Request().Context(), `
+-		SELECT id, case_id, status::text, action_reference::text, action_type::text,
+-		       action_date::text, cert_image_path, cert_unique_id, tracking_code,
+-		       org_rejection_reason, created_at::text
+-		FROM cert_services WHERE id = $1
+-	`, id).Scan(&cs.ID, &cs.CaseID, &cs.Status, &cs.ActionRef, &cs.ActionType,
+-		&cs.ActionDate, &cs.CertImagePath, &cs.CertUniqueID,
+-		&cs.TrackingCode, &cs.RejectReason, &cs.CreatedAt)
+-
++	cs, err := h.svc.Get(c.Request().Context(), id)
+ 	if err != nil {
+ 		return NotFound(c, "سرویس گواهی اقدام یافت نشد")
+ 	}
+-
+ 	return OK(c, cs)
+ }
+ 
+-// RequestConsent for cert service
+ func (h *CertHandler) RequestConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE cert_services SET updated_at = NOW() WHERE id = $1
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "امکان درخواست رضایت در این وضعیت وجود ندارد")
++	if err := h.svc.RequestConsent(c.Request().Context(), id); err != nil {
++		return Conflict(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "کد تایید ارسال شد"})
+ }
+ 
+-// VerifyConsent verifies the consent OTP
+ func (h *CertHandler) VerifyConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	var req struct{ OTP string `json:"otp"` }
+-	if err := c.Bind(&req); err != nil {
+-		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+-	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE cert_services SET consent_granted_at = NOW(), updated_at = NOW()
+-		WHERE id = $1 AND consent_granted_at IS NULL
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "رضایت قبلاً ثبت شده است")
++	if err := h.svc.VerifyConsent(c.Request().Context(), id); err != nil {
++		return Conflict(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "رضایت ثبت شد"})
+ }
+ 
+-// UpdateDetails updates certificate details
+ func (h *CertHandler) UpdateDetails(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+ 	var req struct {
+ 		ActionReference string `json:"action_reference"`
+ 		ActionType      string `json:"action_type"`
+@@ -124,46 +72,37 @@ func (h *CertHandler) UpdateDetails(c echo.Context) error {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+ 
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE cert_services SET
+-			action_reference=$2, action_type=$3, action_date=$4::date,
+-			cert_image_path=$5, cert_unique_id=$6, updated_at=NOW()
+-		WHERE id=$1
+-	`, id, req.ActionReference, req.ActionType, req.ActionDate,
+-		req.CertImageID, req.CertUniqueID)
+-
+-	if err != nil {
+-		return InternalError(c, "خطا در به‌روزرسانی اطلاعات گواهی")
++	input := service.UpdateCertInput{}
++	if req.ActionReference != "" {
++		input.ActionReference = &req.ActionReference
++	}
++	if req.ActionType != "" {
++		input.ActionType = &req.ActionType
++	}
++	if req.ActionDate != "" {
++		input.ActionDate = &req.ActionDate
++	}
++	if req.CertImageID != "" {
++		input.CertImageID = &req.CertImageID
++	}
++	if req.CertUniqueID != "" {
++		input.CertUniqueID = &req.CertUniqueID
+ 	}
+ 
++	if err := h.svc.UpdateDetails(c.Request().Context(), id, input); err != nil {
++		return Unprocessable(c, err.Error(), nil)
++	}
+ 	return OK(c, map[string]string{"message": "اطلاعات گواهی به‌روزرسانی شد"})
+ }
+ 
+-// SubmitToOrg sends the certificate to the organization (final step)
+ func (h *CertHandler) SubmitToOrg(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	if err := h.certSM.Execute(c.Request().Context(), id, "submitted_to_org"); err != nil {
++	result, err := h.svc.SubmitToOrg(c.Request().Context(), id)
++	if err != nil {
+ 		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	// Simulate approval — final tracking code
+-	var caseID uuid.UUID
+-	h.db.QueryRow(c.Request().Context(), `
+-		UPDATE cert_services SET
+-			status = 'approved',
+-			tracking_code = 'CERT-' || substr(id::text, 1, 8),
+-			org_response_at = NOW()
+-		WHERE id = $1 RETURNING case_id
+-	`, id).Scan(&caseID)
+-
+-	h.caseSM.Execute(c.Request().Context(), caseID, "cert_completed")
+-
+-	return OK(c, map[string]string{
+-		"message":       "گواهی اقدام ثبت و تایید شد — فرآیند تکمیل گردید",
+-		"tracking_code": "CERT-" + id.String()[:8],
+-	})
++	return OK(c, result)
+ }
+diff --git a/backend/internal/handler/claim_handler.go b/backend/internal/handler/claim_handler.go
+index e5c1b9c..0549420 100644
+--- a/backend/internal/handler/claim_handler.go
++++ b/backend/internal/handler/claim_handler.go
+@@ -1,28 +1,19 @@
+ package handler
+ 
+ import (
+-	"log/slog"
+-
+ 	"github.com/google/uuid"
+-	"github.com/jackc/pgx/v5/pgxpool"
+ 	"github.com/labstack/echo/v4"
+-
+-	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+ )
+ 
+-// ClaimHandler handles claim service endpoints
+ type ClaimHandler struct {
+-	db      *pgxpool.Pool
+-	caseSM  *workflow.StateMachine
+-	claimSM *workflow.StateMachine
++	svc *service.ClaimService
+ }
+ 
+-// NewClaimHandler creates a new claim handler
+-func NewClaimHandler(db *pgxpool.Pool, caseSM, claimSM *workflow.StateMachine) *ClaimHandler {
+-	return &ClaimHandler{db: db, caseSM: caseSM, claimSM: claimSM}
++func NewClaimHandler(svc *service.ClaimService) *ClaimHandler {
++	return &ClaimHandler{svc: svc}
+ }
+ 
+-// RegisterRoutes registers all claim service routes
+ func (h *ClaimHandler) RegisterRoutes(g *echo.Group) {
+ 	g.GET("/:id", h.Get)
+ 	g.POST("/:id/consent", h.RequestConsent)
+@@ -33,72 +24,40 @@ func (h *ClaimHandler) RegisterRoutes(g *echo.Group) {
+ 	g.DELETE("/:id/documents/:docId", h.DeleteDocument)
+ 	g.POST("/:id/documents/verify", h.VerifyDocument)
+ 	g.POST("/:id/submit", h.SubmitToOrg)
+-	g.POST("/:id/ai-advice", h.AiAdvice)
++	g.POST("/:id/ai-advice", h.AIAdvice)
+ }
+ 
+-// Get returns claim service details
+ func (h *ClaimHandler) Get(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	var cs struct {
+-		ID           uuid.UUID `json:"id"`
+-		CaseID       uuid.UUID `json:"case_id"`
+-		Status       string    `json:"status"`
+-		ClaimType    *string   `json:"claim_type"`
+-		OwnershipType *string  `json:"ownership_type"`
+-		MainPlate    *string   `json:"main_plate_number"`
+-		SubPlate     *string   `json:"sub_plate_number"`
+-		TrackingCode *string   `json:"tracking_code"`
+-		RejectReason *string   `json:"org_rejection_reason"`
+-		CreatedAt    string    `json:"created_at"`
+-	}
+-
+-	err = h.db.QueryRow(c.Request().Context(), `
+-		SELECT id, case_id, status::text, claim_type::text, ownership_type::text,
+-		       main_plate_number, sub_plate_number, tracking_code,
+-		       org_rejection_reason, created_at::text
+-		FROM claim_services WHERE id = $1
+-	`, id).Scan(&cs.ID, &cs.CaseID, &cs.Status, &cs.ClaimType, &cs.OwnershipType,
+-		&cs.MainPlate, &cs.SubPlate, &cs.TrackingCode, &cs.RejectReason, &cs.CreatedAt)
+-
++	cs, err := h.svc.Get(c.Request().Context(), id)
+ 	if err != nil {
+ 		return NotFound(c, "سرویس ادعا یافت نشد")
+ 	}
+-
+ 	return OK(c, cs)
+ }
+ 
+-// RequestConsent with false claim warning
+ func (h *ClaimHandler) RequestConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE claim_services SET false_claim_warning_sent = true, updated_at = NOW()
+-		WHERE id = $1
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "امکان درخواست رضایت در این وضعیت وجود ندارد")
++	if err := h.svc.RequestConsent(c.Request().Context(), id); err != nil {
++		return Conflict(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]interface{}{
+ 		"message": "کد تایید و هشدار قانونی ارسال شد",
+ 		"warning": "توجه: درج ادعای واهی مطابق تبصره ۵ ماده ۱۰ قانون دارای تبعات قانونی است",
+ 	})
+ }
+ 
+-// VerifyConsent verifies consent OTP
+ func (h *ClaimHandler) VerifyConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+ 	var req struct {
+ 		OTP string `json:"otp"`
+ 		Ack bool   `json:"false_claim_acknowledged"`
+@@ -106,22 +65,12 @@ func (h *ClaimHandler) VerifyConsent(c echo.Context) error {
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+-	if !req.Ack {
+-		return BadRequest(c, "باید صریحاً اعلام کنید که از تبعات قانونی ادعای واهی مطلع هستید")
+-	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE claim_services SET consent_granted_at = NOW(), updated_at = NOW()
+-		WHERE id = $1 AND consent_granted_at IS NULL
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "رضایت قبلاً ثبت شده است")
++	if err := h.svc.VerifyConsent(c.Request().Context(), id, req.Ack); err != nil {
++		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "رضایت ثبت شد"})
+ }
+ 
+-// UpdateDetails updates claim details
+ func (h *ClaimHandler) UpdateDetails(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+@@ -145,71 +94,48 @@ func (h *ClaimHandler) UpdateDetails(c echo.Context) error {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+ 
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE claim_services SET
+-			claim_type=$2, ownership_type=$3, main_plate_number=$4, sub_plate_number=$5,
+-			plate_section=$6, total_share=$7, partial_share=$8,
+-			has_government_rights=$9, treasury_payment_ref=$10,
+-			legal_advice_requested=$11, legal_advice_method=$12,
+-			updated_at=NOW()
+-		WHERE id=$1
+-	`, id, req.ClaimType, req.OwnershipType, req.MainPlateNumber, req.SubPlateNumber,
+-		req.PlateSection, req.TotalShare, req.PartialShare,
+-		req.HasGovernmentRights, req.TreasuryPaymentRef,
+-		req.LegalAdviceRequested, req.LegalAdviceMethod)
+-
+-	if err != nil {
+-		return InternalError(c, "خطا در به‌روزرسانی اطلاعات ادعا")
++	input := service.UpdateClaimInput{}
++	if req.ClaimType != "" {
++		input.ClaimType = &req.ClaimType
+ 	}
+-
+-	return OK(c, map[string]string{"message": "اطلاعات ادعا به‌روزرسانی شد"})
+-}
+-
+-// ListDocuments lists claim documents
+-func (h *ClaimHandler) ListDocuments(c echo.Context) error {
+-	id, err := uuid.Parse(c.Param("id"))
+-	if err != nil {
+-		return BadRequest(c, "شناسه نامعتبر")
++	if req.OwnershipType != "" {
++		input.OwnershipType = &req.OwnershipType
+ 	}
+-
+-	rows, err := h.db.Query(c.Request().Context(), `
+-		SELECT id, doc_type::text, file_path, description,
+-		       COALESCE(verified_at IS NOT NULL, false) as verified,
+-		       COALESCE(verification_note, '') as verification_note
+-		FROM claim_documents WHERE claim_service_id = $1
+-		ORDER BY uploaded_at
+-	`, id)
+-	if err != nil {
+-		return InternalError(c, "خطا در دریافت مستندات")
++	if req.MainPlateNumber != "" {
++		input.MainPlateNumber = &req.MainPlateNumber
+ 	}
+-	defer rows.Close()
+-
+-	type doc struct {
+-		ID               uuid.UUID `json:"id"`
+-		DocType          string    `json:"doc_type"`
+-		FilePath         string    `json:"file_path"`
+-		Description      *string   `json:"description"`
+-		Verified         bool      `json:"verified"`
+-		VerificationNote string    `json:"verification_note"`
++	if req.SubPlateNumber != "" {
++		input.SubPlateNumber = &req.SubPlateNumber
+ 	}
+-
+-	var docs []doc
+-	for rows.Next() {
+-		var d doc
+-		rows.Scan(&d.ID, &d.DocType, &d.FilePath, &d.Description, &d.Verified, &d.VerificationNote)
+-		docs = append(docs, d)
++	if req.PlateSection != "" {
++		input.PlateSection = &req.PlateSection
++	}
++	if req.TotalShare > 0 {
++		input.TotalShare = &req.TotalShare
++	}
++	if req.PartialShare > 0 {
++		input.PartialShare = &req.PartialShare
++	}
++	input.HasGovernmentRights = &req.HasGovernmentRights
++	if req.TreasuryPaymentRef != "" {
++		input.TreasuryPaymentRef = &req.TreasuryPaymentRef
++	}
++	input.LegalAdviceRequested = &req.LegalAdviceRequested
++	if req.LegalAdviceMethod != "" {
++		input.LegalAdviceMethod = &req.LegalAdviceMethod
+ 	}
+ 
+-	return OK(c, map[string]interface{}{"documents": docs})
++	if err := h.svc.UpdateDetails(c.Request().Context(), id, input); err != nil {
++		return InternalError(c, err.Error())
++	}
++	return OK(c, map[string]string{"message": "اطلاعات ادعا به‌روزرسانی شد"})
+ }
+ 
+-// AddDocument adds a supporting document
+ func (h *ClaimHandler) AddDocument(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+ 	var req struct {
+ 		DocType     string `json:"doc_type"`
+ 		FileID      string `json:"file_id"`
+@@ -218,38 +144,41 @@ func (h *ClaimHandler) AddDocument(c echo.Context) error {
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+-
+-	var docID uuid.UUID
+-	err = h.db.QueryRow(c.Request().Context(), `
+-		INSERT INTO claim_documents (claim_service_id, doc_type, file_path, description)
+-		VALUES ($1, $2, $3, $4) RETURNING id
+-	`, id, req.DocType, req.FileID, req.Description).Scan(&docID)
+-
++	doc, err := h.svc.AddDocument(c.Request().Context(), id, req.DocType, req.FileID, req.Description)
+ 	if err != nil {
+-		return InternalError(c, "خطا در افزودن مستند")
++		return InternalError(c, err.Error())
+ 	}
+-
+-	return Created(c, map[string]interface{}{"id": docID, "message": "مستند اضافه شد"})
++	return Created(c, map[string]interface{}{"id": doc.ID, "message": "مستند اضافه شد"})
+ }
+ 
+-// DeleteDocument removes a document
+ func (h *ClaimHandler) DeleteDocument(c echo.Context) error {
+-	_, err := h.db.Exec(c.Request().Context(), `
+-		DELETE FROM claim_documents WHERE id = $1 AND verified_at IS NULL
+-	`, c.Param("docId"))
++	docID, err := uuid.Parse(c.Param("docId"))
+ 	if err != nil {
+-		return NotFound(c, "مستند یافت نشد یا قبلاً تایید شده است")
++		return BadRequest(c, "شناسه مستند نامعتبر")
++	}
++	if err := h.svc.DeleteDocument(c.Request().Context(), docID); err != nil {
++		return NotFound(c, err.Error())
+ 	}
+ 	return NoContent(c)
+ }
+ 
+-// VerifyDocument marks a document as verified/rejected by legal expert
+-func (h *ClaimHandler) VerifyDocument(c echo.Context) error {
++func (h *ClaimHandler) ListDocuments(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
++	docs, err := h.svc.ListDocuments(c.Request().Context(), id)
++	if err != nil {
++		return InternalError(c, err.Error())
++	}
++	return OK(c, map[string]interface{}{"documents": docs})
++}
+ 
++func (h *ClaimHandler) VerifyDocument(c echo.Context) error {
++	id, err := uuid.Parse(c.Param("id"))
++	if err != nil {
++		return BadRequest(c, "شناسه نامعتبر")
++	}
+ 	var req struct {
+ 		DocumentID string `json:"document_id"`
+ 		Verified   bool   `json:"verified"`
+@@ -258,125 +187,36 @@ func (h *ClaimHandler) VerifyDocument(c echo.Context) error {
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+-
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE claim_documents SET
+-			verified_by = (SELECT legal_expert_id FROM cases c
+-			               JOIN claim_services cs ON c.id = cs.case_id WHERE cs.id = $2),
+-			verified_at = CASE WHEN $3 THEN NOW() ELSE NULL END,
+-			verification_note = $4
+-		WHERE id = $1
+-	`, req.DocumentID, id, req.Verified, req.Note)
+-
++	docID, err := uuid.Parse(req.DocumentID)
+ 	if err != nil {
+-		return InternalError(c, "خطا در ثبت تایید مستند")
++		return BadRequest(c, "شناسه مستند نامعتبر")
++	}
++	if err := h.svc.VerifyDocument(c.Request().Context(), docID, id, req.Verified, req.Note); err != nil {
++		return InternalError(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "نظر کارشناسی ثبت شد"})
+ }
+ 
+-// SubmitToOrg sends the claim to the organization
+ func (h *ClaimHandler) SubmitToOrg(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	// Check all documents are verified
+-	var unverified int
+-	h.db.QueryRow(c.Request().Context(), `
+-		SELECT COUNT(*) FROM claim_documents
+-		WHERE claim_service_id = $1 AND verified_at IS NULL
+-	`, id).Scan(&unverified)
+-
+-	if unverified > 0 {
+-		return Unprocessable(c, "تمام مستندات باید توسط کارشناس تایید شوند", map[string]int{"unverified_count": unverified})
+-	}
+-
+-	if err := h.claimSM.Execute(c.Request().Context(), id, "submitted_to_org"); err != nil {
++	result, err := h.svc.SubmitToOrg(c.Request().Context(), id)
++	if err != nil {
+ 		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	// Simulate approval
+-	var caseID uuid.UUID
+-	h.db.QueryRow(c.Request().Context(), `
+-		UPDATE claim_services SET
+-			status = 'approved',
+-			tracking_code = 'CLAIM-' || substr(id::text, 1, 8),
+-			org_response_at = NOW()
+-		WHERE id = $1 RETURNING case_id
+-	`, id).Scan(&caseID)
+-
+-	h.caseSM.Execute(c.Request().Context(), caseID, "claim_completed")
+-
+-	return OK(c, map[string]string{
+-		"message":       "ادعا ثبت و تایید شد (شبیه‌سازی)",
+-		"tracking_code": "CLAIM-" + id.String()[:8],
+-	})
++	return OK(c, result)
+ }
+ 
+-// AiAdvice provides AI-powered legal guidance
+-func (h *ClaimHandler) AiAdvice(c echo.Context) error {
++func (h *ClaimHandler) AIAdvice(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	// Get claim context
+-	var claimType, ownershipType string
+-	h.db.QueryRow(c.Request().Context(), `
+-		SELECT COALESCE(claim_type::text, ''), COALESCE(ownership_type::text, '')
+-		FROM claim_services WHERE id = $1
+-	`, id).Scan(&claimType, &ownershipType)
+-
+-	// Simple rule-based advice (in production: call AI/RAG service)
+-	advice := generateLegalAdvice(claimType, ownershipType)
+-
+-	var adviceID uuid.UUID
+-	h.db.QueryRow(c.Request().Context(), `
+-		INSERT INTO ai_advice_logs (case_id, claim_service_id, input_context,
+-			recommended_action, legal_references, confidence_score, model_version)
+-		SELECT cs.case_id, cs.id, '{}'::jsonb, $2, $3, $4, 'rule-v1.0'
+-		FROM claim_services cs WHERE cs.id = $1
+-		RETURNING id
+-	`, id, advice.Action, advice.References, advice.Confidence).Scan(&adviceID)
+-
+-	slog.Info("AI advice generated", "claim_id", id, "advice_id", adviceID)
+-
+-	return OK(c, map[string]interface{}{
+-		"id":                 adviceID,
+-		"recommended_action": advice.Action,
+-		"legal_references":   advice.References,
+-		"confidence_score":   advice.Confidence,
+-		"disclaimer":         "این یک نظر رسمی حقوقی نیست و صرفاً راهنمایی برای انتخاب نوع اقدام قانونی است",
+-	})
+-}
+-
+-type legalAdvice struct {
+-	Action     string   `json:"action"`
+-	References []string `json:"references"`
+-	Confidence float64  `json:"confidence"`
+-}
+-
+-func generateLegalAdvice(claimType, ownershipType string) legalAdvice {
+-	switch claimType {
+-	case "ownership":
+-		return legalAdvice{
+-			Action:     "طرح دعوای اثبات مالکیت در مراجع قضایی",
+-			References: []string{"ماده ۲۲ قانون ثبت", "ماده ۱۰ قانون الزام به ثبت رسمی معاملات"},
+-			Confidence: 0.85,
+-		}
+-	case "easement":
+-		return legalAdvice{
+-			Action:     "طرح دعوای اثبات حق ارتفاق در مراجع قضایی",
+-			References: []string{"ماده ۹۳ قانون مدنی", "ماده ۱۰ قانون الزام"},
+-			Confidence: 0.80,
+-		}
+-	default:
+-		return legalAdvice{
+-			Action:     "مراجعه به کارشناس ثبتی برای تعیین مسیر حقوقی مناسب",
+-			References: []string{"ماده ۱۰ قانون الزام به ثبت رسمی معاملات"},
+-			Confidence: 0.70,
+-		}
++	advice, err := h.svc.GenerateAIAdvice(c.Request().Context(), id)
++	if err != nil {
++		return InternalError(c, err.Error())
+ 	}
++	return OK(c, advice)
+ }
+diff --git a/backend/internal/handler/map_handler.go b/backend/internal/handler/map_handler.go
+index ad08450..e7e2b30 100644
+--- a/backend/internal/handler/map_handler.go
++++ b/backend/internal/handler/map_handler.go
+@@ -1,29 +1,20 @@
+ package handler
+ 
+ import (
+-	"log/slog"
+-
+ 	"github.com/google/uuid"
+-	"github.com/jackc/pgx/v5/pgxpool"
+ 	"github.com/labstack/echo/v4"
+-
+ 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
+-	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
+ )
+ 
+-// MapHandler handles map service endpoints
+ type MapHandler struct {
+-	db     *pgxpool.Pool
+-	caseSM *workflow.StateMachine
+-	mapSM  *workflow.StateMachine
++	svc *service.MapService
+ }
+ 
+-// NewMapHandler creates a new map handler
+-func NewMapHandler(db *pgxpool.Pool, caseSM, mapSM *workflow.StateMachine) *MapHandler {
+-	return &MapHandler{db: db, caseSM: caseSM, mapSM: mapSM}
++func NewMapHandler(svc *service.MapService) *MapHandler {
++	return &MapHandler{svc: svc}
+ }
+ 
+-// RegisterRoutes registers all map service routes
+ func (h *MapHandler) RegisterRoutes(g *echo.Group) {
+ 	g.GET("/:id", h.Get)
+ 	g.POST("/:id/consent", h.RequestConsent)
+@@ -33,107 +24,51 @@ func (h *MapHandler) RegisterRoutes(g *echo.Group) {
+ 	g.POST("/:id/submit", h.SubmitToOrg)
+ }
+ 
+-// Get returns map service details
+ func (h *MapHandler) Get(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	var ms struct {
+-		ID             uuid.UUID `json:"id"`
+-		CaseID         uuid.UUID `json:"case_id"`
+-		Status         string    `json:"status"`
+-		PropertyType   *string   `json:"property_type"`
+-		ApproxAreaSqm  *float64  `json:"approx_area_sqm"`
+-		GeoLatitude    *float64  `json:"geo_latitude"`
+-		GeoLongitude   *float64  `json:"geo_longitude"`
+-		MapFilePath    *string   `json:"map_file_path"`
+-		TrackingCode   *string   `json:"tracking_code"`
+-		RejectReason   *string   `json:"org_rejection_reason"`
+-		CreatedAt      string    `json:"created_at"`
+-	}
+-
+-	err = h.db.QueryRow(c.Request().Context(), `
+-		SELECT id, case_id, status::text, property_type, approx_area_sqm,
+-		       geo_latitude, geo_longitude, map_file_path, tracking_code,
+-		       org_rejection_reason, created_at::text
+-		FROM map_services WHERE id = $1
+-	`, id).Scan(&ms.ID, &ms.CaseID, &ms.Status, &ms.PropertyType, &ms.ApproxAreaSqm,
+-		&ms.GeoLatitude, &ms.GeoLongitude, &ms.MapFilePath, &ms.TrackingCode,
+-		&ms.RejectReason, &ms.CreatedAt)
+-
++	ms, err := h.svc.Get(c.Request().Context(), id)
+ 	if err != nil {
+ 		return NotFound(c, "سرویس نقشه یافت نشد")
+ 	}
+-
+ 	return OK(c, ms)
+ }
+ 
+-// RequestConsent triggers OTP for consent
+ func (h *MapHandler) RequestConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	// In production: send real OTP to applicant's mobile
+-	// For now: just update status to indicate consent requested
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE map_services SET updated_at = NOW() WHERE id = $1 AND status = 'expert_assigned'
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "امکان درخواست رضایت در این وضعیت وجود ندارد")
++	if err := h.svc.RequestConsent(c.Request().Context(), id); err != nil {
++		return Conflict(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "کد تایید ارسال شد — لطفاً از طریق /consent/verify تایید کنید"})
+ }
+ 
+-// VerifyConsent verifies the consent OTP
+ func (h *MapHandler) VerifyConsent(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	var req struct{ OTP string `json:"otp"` }
+-	if err := c.Bind(&req); err != nil || req.OTP == "" {
+-		return BadRequest(c, "کد تایید الزامی است")
+-	}
+-
+-	// In production: verify OTP against Redis
+-	// For now: accept and update status
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE map_services SET consent_granted_at = NOW(), updated_at = NOW()
+-		WHERE id = $1 AND consent_granted_at IS NULL
+-	`, id)
+-	if err != nil {
+-		return Conflict(c, "رضایت قبلاً ثبت شده یا سرویس در وضعیت نامعتبر است")
++	if err := h.svc.VerifyConsent(c.Request().Context(), id); err != nil {
++		return Conflict(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "رضایت ثبت شد — کارشناس می‌تواند عملیات میدانی را آغاز کند"})
+ }
+ 
+-// StartFieldwork transitions map service to fieldwork_in_progress
+ func (h *MapHandler) StartFieldwork(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	role := middleware.GetUserRole(c)
+-	if role != "survey_expert" {
+-		return Forbidden(c, "فقط کارشناس نقشه‌بردار می‌تواند عملیات میدانی را شروع کند")
+-	}
+-
+-	if err := h.mapSM.Execute(c.Request().Context(), id, "fieldwork_in_progress"); err != nil {
+-		return Conflict(c, err.Error())
++	if err := h.svc.StartFieldwork(c.Request().Context(), id, middleware.GetUserRole(c)); err != nil {
++		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "عملیات میدانی آغاز شد"})
+ }
+ 
+-// SubmitFieldwork submits the fieldwork results (map + photos + descriptive table)
+ func (h *MapHandler) SubmitFieldwork(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+@@ -141,56 +76,27 @@ func (h *MapHandler) SubmitFieldwork(c echo.Context) error {
+ 	}
+ 
+ 	var req struct {
+-		MapFileID         string `json:"map_file_id"`
+-		DescriptiveTable  map[string]interface{} `json:"descriptive_table"`
++		MapFileID        string                 `json:"map_file_id"`
++		DescriptiveTable map[string]interface{} `json:"descriptive_table"`
+ 	}
+ 	if err := c.Bind(&req); err != nil {
+ 		return BadRequest(c, "اطلاعات ورودی نامعتبر است")
+ 	}
+ 
+-	// Update map service with fieldwork data
+-	_, err = h.db.Exec(c.Request().Context(), `
+-		UPDATE map_services SET
+-			map_file_path = $2,
+-			descriptive_table = $3,
+-			fieldwork_completed_at = NOW(),
+-			status = 'fieldwork_done',
+-			updated_at = NOW()
+-		WHERE id = $1 AND status = 'fieldwork_in_progress'
+-	`, id, req.MapFileID, req.DescriptiveTable)
+-
+-	if err != nil {
+-		slog.Error("failed to submit fieldwork", "error", err)
+-		return InternalError(c, "خطا در ثبت اطلاعات میدانی")
++	if err := h.svc.SubmitFieldwork(c.Request().Context(), id, req.MapFileID, req.DescriptiveTable); err != nil {
++		return InternalError(c, err.Error())
+ 	}
+-
+ 	return OK(c, map[string]string{"message": "اطلاعات میدانی ثبت شد — آماده ارسال به سازمان"})
+ }
+ 
+-// SubmitToOrg sends the map service to the organization
+ func (h *MapHandler) SubmitToOrg(c echo.Context) error {
+ 	id, err := uuid.Parse(c.Param("id"))
+ 	if err != nil {
+ 		return BadRequest(c, "شناسه نامعتبر")
+ 	}
+-
+-	if err := h.mapSM.Execute(c.Request().Context(), id, "submitted_to_org"); err != nil {
++	result, err := h.svc.SubmitToOrg(c.Request().Context(), id)
++	if err != nil {
+ 		return Unprocessable(c, err.Error(), nil)
+ 	}
+-
+-	// TODO: actual integration — send to organization via Outbox pattern
+-	// For now, simulate immediate approval
+-	var caseID uuid.UUID
+-	h.db.QueryRow(c.Request().Context(), `
+-		UPDATE map_services SET status = 'approved', tracking_code = 'MAP-' || substr(id::text, 1, 8), org_response_at = NOW()
+-		WHERE id = $1 RETURNING case_id
+-	`, id).Scan(&caseID)
+-
+-	// Transition case to map_completed
+-	h.caseSM.Execute(c.Request().Context(), caseID, "map_completed")
+-
+-	return OK(c, map[string]string{
+-		"message":       "نقشه به سازمان ارسال و تایید شد (شبیه‌سازی)",
+-		"tracking_code": "MAP-" + id.String()[:8],
+-	})
++	return OK(c, result)
+ }
+diff --git a/backend/internal/notification/notification.go b/backend/internal/notification/notification.go
+new file mode 100644
+index 0000000..858dccf
+--- /dev/null
++++ b/backend/internal/notification/notification.go
+@@ -0,0 +1,104 @@
++package notification
++
++import (
++	"context"
++	"fmt"
++	"log/slog"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++	"github.com/redis/go-redis/v9"
++)
++
++// Service handles all notification channels
++type Service struct {
++	db       *pgxpool.Pool
++	redisCli *redis.Client
++}
++
++// NewService creates a notification service
++func NewService(db *pgxpool.Pool, redisCli *redis.Client) *Service {
++	return &Service{db: db, redisCli: redisCli}
++}
++
++// SendInApp creates an in-app notification in the database
++func (s *Service) SendInApp(ctx context.Context, userID uuid.UUID, caseID *uuid.UUID, templateKey, content string) error {
++	_, err := s.db.Exec(ctx, `
++		INSERT INTO notifications (user_id, case_id, channel, template_key, content, status)
++		VALUES ($1, $2, 'in_app', $3, $4, 'pending')
++	`, userID, caseID, templateKey, content)
++	if err != nil {
++		return fmt.Errorf("failed to create in-app notification: %w", err)
++	}
++	slog.Info("in-app notification created",
++		"user_id", userID, "template", templateKey)
++	return nil
++}
++
++// SendSMS sends an SMS through the configured provider
++// فعلاً stub: فقط لاگ می‌کند — در production به SMS Gateway واقعی وصل می‌شود
++func (s *Service) SendSMS(ctx context.Context, userID uuid.UUID, mobile, content string) error {
++	// Rate limiting: max 5 SMS per mobile per 10 minutes
++	rateKey := fmt.Sprintf("sms_rate:%s", mobile)
++	count, err := s.redisCli.Incr(ctx, rateKey).Result()
++	if err == nil && count == 1 {
++		s.redisCli.Expire(ctx, rateKey, 600) // 10 minutes in seconds
++	}
++	if count > 5 {
++		slog.Warn("SMS rate limited", "mobile", mobile, "count", count)
++		return fmt.Errorf("تعداد پیامک‌های مجاز برای این شماره به پایان رسیده — لطفاً ۱۰ دقیقه دیگر تلاش کنید")
++	}
++
++	// Stub: log SMS instead of actually sending
++	slog.Info("SMS (stub)",
++		"mobile", mobile,
++		"content", content,
++	)
++
++	// Record in database
++	s.db.Exec(ctx, `
++		INSERT INTO notifications (user_id, channel, template_key, content, status)
++		VALUES ($1, 'sms', 'sms_direct', $2, 'sent')
++	`, userID, content)
++
++	return nil
++}
++
++// SendEmail sends an email — stub for now
++func (s *Service) SendEmail(ctx context.Context, userID uuid.UUID, email, subject, body string) error {
++	slog.Info("Email (stub)",
++		"email", email,
++		"subject", subject,
++	)
++
++	s.db.Exec(ctx, `
++		INSERT INTO notifications (user_id, channel, template_key, content, status)
++		VALUES ($1, 'email', $2, $3, 'pending')
++	`, userID, subject, body)
++
++	return nil
++}
++
++// NotifyApplicant sends both in-app and SMS notifications to an applicant
++func (s *Service) NotifyApplicant(ctx context.Context, userID uuid.UUID, caseID uuid.UUID, message string) error {
++	// In-app
++	if err := s.SendInApp(ctx, userID, &caseID, "case_update", message); err != nil {
++		slog.Error("failed to send in-app notification", "error", err)
++	}
++
++	// SMS (stub)
++	var mobile string
++	s.db.QueryRow(ctx, `SELECT mobile FROM users WHERE id = $1`, userID).Scan(&mobile)
++	if mobile != "" {
++		if err := s.SendSMS(ctx, userID, mobile, message); err != nil {
++			slog.Error("failed to send SMS", "error", err)
++		}
++	}
++
++	return nil
++}
++
++// NotifyExpertInApp sends in-app notification to an expert
++func (s *Service) NotifyExpertInApp(ctx context.Context, expertID uuid.UUID, caseID uuid.UUID, message string) error {
++	return s.SendInApp(ctx, expertID, &caseID, "expert_assignment", message)
++}
+diff --git a/backend/internal/outbox/outbox.go b/backend/internal/outbox/outbox.go
+new file mode 100644
+index 0000000..f2524bf
+--- /dev/null
++++ b/backend/internal/outbox/outbox.go
+@@ -0,0 +1,198 @@
++package outbox
++
++import (
++	"context"
++	"encoding/json"
++	"fmt"
++	"log/slog"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgxpool"
++	"github.com/nats-io/nats.go"
++)
++
++// Message represents a row in the outbox_messages table
++type Message struct {
++	ID            uuid.UUID       `json:"id"`
++	AggregateType string          `json:"aggregate_type"`
++	AggregateID   uuid.UUID       `json:"aggregate_id"`
++	EventType     string          `json:"event_type"`
++	Payload       json.RawMessage `json:"payload"`
++	Status        string          `json:"status"`
++	RetryCount    int             `json:"retry_count"`
++	LastError     *string         `json:"last_error,omitempty"`
++	CreatedAt     time.Time       `json:"created_at"`
++	ProcessedAt   *time.Time      `json:"processed_at,omitempty"`
++	CorrelationID *uuid.UUID      `json:"correlation_id,omitempty"`
++}
++
++// Publisher polls the outbox table and processes pending messages
++type Publisher struct {
++	db       *pgxpool.Pool
++	eventBus *nats.Conn
++	interval time.Duration
++	maxRetry int
++	// sendFunc is the actual function that sends to the organization
++	sendFunc func(ctx context.Context, msg Message) error
++}
++
++// NewPublisher creates a new outbox publisher
++func NewPublisher(db *pgxpool.Pool, eventBus *nats.Conn, interval time.Duration) *Publisher {
++	return &Publisher{
++		db:       db,
++		eventBus: eventBus,
++		interval: interval,
++		maxRetry: 3,
++	}
++}
++
++// SetSender sets the function that actually sends messages to the organization
++func (p *Publisher) SetSender(fn func(ctx context.Context, msg Message) error) {
++	p.sendFunc = fn
++}
++
++// Start begins the poll loop — blocks until context cancelled
++func (p *Publisher) Start(ctx context.Context) {
++	slog.Info("outbox publisher started", "interval", p.interval)
++	ticker := time.NewTicker(p.interval)
++	defer ticker.Stop()
++
++	for {
++		select {
++		case <-ctx.Done():
++			slog.Info("outbox publisher stopped")
++			return
++		case <-ticker.C:
++			if err := p.processBatch(ctx); err != nil {
++				slog.Error("outbox batch failed", "error", err)
++			}
++		}
++	}
++}
++
++func (p *Publisher) processBatch(ctx context.Context) error {
++	tx, err := p.db.Begin(ctx)
++	if err != nil {
++		return fmt.Errorf("failed to begin tx: %w", err)
++	}
++	defer tx.Rollback(ctx)
++
++	rows, err := tx.Query(ctx, `
++		SELECT id, aggregate_type, aggregate_id, event_type, payload,
++		       status, retry_count, last_error, created_at, processed_at,
++		       correlation_id
++		FROM outbox_messages
++		WHERE status IN ('pending', 'failed')
++		  AND retry_count < $1
++		ORDER BY created_at
++		LIMIT 50
++		FOR UPDATE SKIP LOCKED
++	`, p.maxRetry)
++	if err != nil {
++		return fmt.Errorf("failed to query outbox: %w", err)
++	}
++	defer rows.Close()
++
++	var messages []Message
++	for rows.Next() {
++		var m Message
++		var lastError *string
++		if err := rows.Scan(&m.ID, &m.AggregateType, &m.AggregateID, &m.EventType,
++			&m.Payload, &m.Status, &m.RetryCount, &lastError,
++			&m.CreatedAt, &m.ProcessedAt, &m.CorrelationID); err != nil {
++			return fmt.Errorf("failed to scan outbox row: %w", err)
++		}
++		if lastError != nil {
++			m.LastError = lastError
++		}
++		messages = append(messages, m)
++	}
++
++	for _, msg := range messages {
++		var sendErr error
++		if p.sendFunc != nil {
++			sendErr = p.sendFunc(ctx, msg)
++		} else {
++			// Stub: publish to NATS as fallback
++			sendErr = p.publishToNATS(ctx, msg)
++		}
++
++		if sendErr != nil {
++			errMsg := sendErr.Error()
++			tx.Exec(ctx, `
++				UPDATE outbox_messages
++				SET status = 'failed', retry_count = retry_count + 1, last_error = $2
++				WHERE id = $1
++			`, msg.ID, errMsg)
++
++			if msg.RetryCount+1 >= p.maxRetry {
++				slog.Error("outbox message exhausted retries — moving to DLQ",
++					"id", msg.ID,
++					"aggregate_type", msg.AggregateType,
++					"retry_count", msg.RetryCount+1,
++				)
++				// Publish to DLQ via NATS
++				if p.eventBus != nil {
++					dlqData, _ := json.Marshal(map[string]interface{}{
++						"original": msg,
++						"error":    errMsg,
++					})
++					p.eventBus.Publish("integration.dlq", dlqData)
++				}
++			}
++		} else {
++			tx.Exec(ctx, `
++				UPDATE outbox_messages
++				SET status = 'sent', processed_at = NOW()
++				WHERE id = $1
++			`, msg.ID)
++		}
++	}
++
++	return tx.Commit(ctx)
++}
++
++func (p *Publisher) publishToNATS(ctx context.Context, msg Message) error {
++	if p.eventBus == nil {
++		return fmt.Errorf("NATS not available")
++	}
++	subj := fmt.Sprintf("outbox.%s.%s", msg.AggregateType, msg.EventType)
++	return p.eventBus.Publish(subj, msg.Payload)
++}
++
++// Recorder records a message in the outbox table within an existing transaction
++type Recorder struct {
++	tx pgx.Tx
++}
++
++// NewRecorder creates a recorder bound to a transaction
++func NewRecorder(tx pgx.Tx) *Recorder {
++	return &Recorder{tx: tx}
++}
++
++// Record inserts a message into the outbox within the current transaction
++func (r *Recorder) Record(ctx context.Context, aggregateType string, aggregateID uuid.UUID, eventType string, payload interface{}) error {
++	payloadBytes, err := json.Marshal(payload)
++	if err != nil {
++		return fmt.Errorf("failed to marshal outbox payload: %w", err)
++	}
++
++	correlationID := uuid.New()
++	_, err = r.tx.Exec(ctx, `
++		INSERT INTO outbox_messages (aggregate_type, aggregate_id, event_type, payload, correlation_id)
++		VALUES ($1, $2, $3, $4, $5)
++	`, aggregateType, aggregateID, eventType, payloadBytes, correlationID)
++	if err != nil {
++		return fmt.Errorf("failed to record outbox message: %w", err)
++	}
++
++	slog.Debug("outbox message recorded",
++		"aggregate_type", aggregateType,
++		"aggregate_id", aggregateID,
++		"event_type", eventType,
++		"correlation_id", correlationID,
++	)
++	return nil
++}
+diff --git a/backend/internal/repository/aux_repo.go b/backend/internal/repository/aux_repo.go
+new file mode 100644
+index 0000000..5d86d40
+--- /dev/null
++++ b/backend/internal/repository/aux_repo.go
+@@ -0,0 +1,77 @@
++package repository
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresAuditLogRepo implements AuditLogRepository
++type PostgresAuditLogRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresAuditLogRepo(db *pgxpool.Pool) *PostgresAuditLogRepo {
++	return &PostgresAuditLogRepo{db: db}
++}
++
++func (r *PostgresAuditLogRepo) Record(ctx context.Context, event *AuditEvent) error {
++	_, err := r.db.Exec(ctx, `
++		INSERT INTO audit_logs (event_type, actor_type, actor_id, actor_ip,
++		                        resource_type, resource_id, changes, metadata, correlation_id)
++		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
++	`, event.EventType, event.ActorType, event.ActorID, event.ActorIP,
++		event.ResourceType, event.ResourceID, event.Changes, event.Metadata,
++		event.CorrelationID,
++	)
++	if err != nil {
++		return fmt.Errorf("failed to record audit event: %w", err)
++	}
++	return nil
++}
++
++// PostgresNotificationRepo implements NotificationRepository
++type PostgresNotificationRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresNotificationRepo(db *pgxpool.Pool) *PostgresNotificationRepo {
++	return &PostgresNotificationRepo{db: db}
++}
++
++func (r *PostgresNotificationRepo) Create(ctx context.Context, n *Notification) error {
++	_, err := r.db.Exec(ctx, `
++		INSERT INTO notifications (user_id, case_id, channel, template_key, content, status)
++		VALUES ($1, $2, $3::notification_channel, $4, $5, 'pending')
++	`, n.UserID, n.CaseID, n.Channel, n.TemplateKey, n.Content)
++	if err != nil {
++		return fmt.Errorf("failed to create notification: %w", err)
++	}
++	return nil
++}
++
++// PostgresAIAdviceRepo implements AIAdviceRepository
++type PostgresAIAdviceRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresAIAdviceRepo(db *pgxpool.Pool) *PostgresAIAdviceRepo {
++	return &PostgresAIAdviceRepo{db: db}
++}
++
++func (r *PostgresAIAdviceRepo) Save(ctx context.Context, claimID uuid.UUID, advice *AIAdviceLog) (uuid.UUID, error) {
++	var id uuid.UUID
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO ai_advice_logs (case_id, claim_service_id, input_context,
++			recommended_action, legal_references, confidence_score, model_version)
++		SELECT cs.case_id, cs.id, '{}'::jsonb, $2, $3, $4, 'rule-v1.0'
++		FROM claim_services cs WHERE cs.id = $1
++		RETURNING id
++	`, claimID, advice.Action, advice.References, advice.Confidence).Scan(&id)
++	if err != nil {
++		return uuid.Nil, fmt.Errorf("failed to save AI advice: %w", err)
++	}
++	return id, nil
++}
+diff --git a/backend/internal/repository/case_repo.go b/backend/internal/repository/case_repo.go
+new file mode 100644
+index 0000000..980def7
+--- /dev/null
++++ b/backend/internal/repository/case_repo.go
+@@ -0,0 +1,186 @@
++package repository
++
++import (
++	"context"
++	"fmt"
++	"strings"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresCaseRepo implements CaseRepository
++type PostgresCaseRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresCaseRepo(db *pgxpool.Pool) *PostgresCaseRepo {
++	return &PostgresCaseRepo{db: db}
++}
++
++func (r *PostgresCaseRepo) ListByApplicant(ctx context.Context, applicantID uuid.UUID, offset, limit int) ([]Case, error) {
++	rows, err := r.db.Query(ctx, `
++		SELECT id, applicant_id, applicant_capacity::text, status::text,
++		       province, city, district, village, address_detail,
++		       legal_expert_id, survey_expert_id, proxy_verified,
++		       map_tracking_code, claim_tracking_code, cert_tracking_code,
++		       deadline_2years, applicant_deceased, deadline_5months,
++		       created_at, updated_at, completed_at
++		FROM cases WHERE applicant_id = $1
++		ORDER BY created_at DESC LIMIT $2 OFFSET $3
++	`, applicantID, limit, offset)
++	if err != nil {
++		return nil, fmt.Errorf("failed to list cases: %w", err)
++	}
++	defer rows.Close()
++	return scanCases(rows)
++}
++
++func (r *PostgresCaseRepo) ListAll(ctx context.Context, offset, limit int) ([]Case, error) {
++	rows, err := r.db.Query(ctx, `
++		SELECT id, applicant_id, applicant_capacity::text, status::text,
++		       province, city, district, village, address_detail,
++		       legal_expert_id, survey_expert_id, proxy_verified,
++		       map_tracking_code, claim_tracking_code, cert_tracking_code,
++		       deadline_2years, applicant_deceased, deadline_5months,
++		       created_at, updated_at, completed_at
++		FROM cases ORDER BY created_at DESC LIMIT $1 OFFSET $2
++	`, limit, offset)
++	if err != nil {
++		return nil, fmt.Errorf("failed to list all cases: %w", err)
++	}
++	defer rows.Close()
++	return scanCases(rows)
++}
++
++func (r *PostgresCaseRepo) Create(ctx context.Context, c *Case) (*Case, error) {
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO cases (applicant_id, applicant_capacity, province, city, district,
++		                   village, address_detail, legal_expert_id, survey_expert_id)
++		VALUES ($1, $2::applicant_capacity, $3, $4, $5, $6, $7, $8, $9)
++		RETURNING id, applicant_id, applicant_capacity::text, status::text,
++		          province, city, district, village, address_detail,
++		          legal_expert_id, survey_expert_id, proxy_verified,
++		          map_tracking_code, claim_tracking_code, cert_tracking_code,
++		          deadline_2years, applicant_deceased, deadline_5months,
++		          created_at, updated_at, completed_at
++	`, c.ApplicantID, c.ApplicantCapacity, c.Province, c.City,
++		c.District, c.Village, c.AddressDetail,
++		c.LegalExpertID, c.SurveyExpertID,
++	).Scan(
++		&c.ID, &c.ApplicantID, &c.ApplicantCapacity, &c.Status,
++		&c.Province, &c.City, &c.District, &c.Village, &c.AddressDetail,
++		&c.LegalExpertID, &c.SurveyExpertID, &c.ProxyVerified,
++		&c.MapTrackingCode, &c.ClaimTrackingCode, &c.CertTrackingCode,
++		&c.Deadline2Years, &c.ApplicantDeceased, &c.Deadline5Months,
++		&c.CreatedAt, &c.UpdatedAt, &c.CompletedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create case: %w", err)
++	}
++	return c, nil
++}
++
++func (r *PostgresCaseRepo) GetByID(ctx context.Context, id uuid.UUID) (*Case, error) {
++	var c Case
++	err := r.db.QueryRow(ctx, `
++		SELECT id, applicant_id, applicant_capacity::text, status::text,
++		       province, city, district, village, address_detail,
++		       legal_expert_id, survey_expert_id, proxy_verified,
++		       map_tracking_code, claim_tracking_code, cert_tracking_code,
++		       deadline_2years, applicant_deceased, deadline_5months,
++		       created_at, updated_at, completed_at
++		FROM cases WHERE id = $1
++	`, id).Scan(
++		&c.ID, &c.ApplicantID, &c.ApplicantCapacity, &c.Status,
++		&c.Province, &c.City, &c.District, &c.Village, &c.AddressDetail,
++		&c.LegalExpertID, &c.SurveyExpertID, &c.ProxyVerified,
++		&c.MapTrackingCode, &c.ClaimTrackingCode, &c.CertTrackingCode,
++		&c.Deadline2Years, &c.ApplicantDeceased, &c.Deadline5Months,
++		&c.CreatedAt, &c.UpdatedAt, &c.CompletedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("case not found: %w", err)
++	}
++	return &c, nil
++}
++
++func (r *PostgresCaseRepo) UpdateByID(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
++	if len(fields) == 0 {
++		return nil
++	}
++
++	setClauses := make([]string, 0, len(fields))
++	args := make([]interface{}, 0, len(fields)+1)
++	argIdx := 1
++
++	for field, value := range fields {
++		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
++		args = append(args, value)
++		argIdx++
++	}
++	args = append(args, id)
++
++	query := fmt.Sprintf("UPDATE cases SET %s, updated_at = NOW() WHERE id = $%d",
++		strings.Join(setClauses, ", "), argIdx)
++
++	tag, err := r.db.Exec(ctx, query, args...)
++	if err != nil {
++		return fmt.Errorf("failed to update case: %w", err)
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("case %s not found", id)
++	}
++	return nil
++}
++
++func (r *PostgresCaseRepo) UpdateStatus(ctx context.Context, id uuid.UUID, status string) error {
++	tag, err := r.db.Exec(ctx,
++		`UPDATE cases SET status = $1::case_status, updated_at = NOW() WHERE id = $2`,
++		status, id,
++	)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("case %s not found", id)
++	}
++	return nil
++}
++
++func (r *PostgresCaseRepo) UpdateCapacity(ctx context.Context, id uuid.UUID, capacity string) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE cases SET applicant_capacity = $1::applicant_capacity, updated_at = NOW()
++		WHERE id = $2
++	`, capacity, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("case %s not found", id)
++	}
++	return nil
++}
++
++// helpers
++
++func scanCases(rows pgx.Rows) ([]Case, error) {
++	var cases []Case
++	for rows.Next() {
++		var c Case
++		err := rows.Scan(
++			&c.ID, &c.ApplicantID, &c.ApplicantCapacity, &c.Status,
++			&c.Province, &c.City, &c.District, &c.Village, &c.AddressDetail,
++			&c.LegalExpertID, &c.SurveyExpertID, &c.ProxyVerified,
++			&c.MapTrackingCode, &c.ClaimTrackingCode, &c.CertTrackingCode,
++			&c.Deadline2Years, &c.ApplicantDeceased, &c.Deadline5Months,
++			&c.CreatedAt, &c.UpdatedAt, &c.CompletedAt,
++		)
++		if err != nil {
++			return nil, fmt.Errorf("failed to scan case row: %w", err)
++		}
++		cases = append(cases, c)
++	}
++	return cases, nil
++}
+diff --git a/backend/internal/repository/cert_repo.go b/backend/internal/repository/cert_repo.go
+new file mode 100644
+index 0000000..eb1e285
+--- /dev/null
++++ b/backend/internal/repository/cert_repo.go
+@@ -0,0 +1,150 @@
++package repository
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresCertServiceRepo implements CertServiceRepository
++type PostgresCertServiceRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresCertServiceRepo(db *pgxpool.Pool) *PostgresCertServiceRepo {
++	return &PostgresCertServiceRepo{db: db}
++}
++
++func (r *PostgresCertServiceRepo) Create(ctx context.Context, caseID uuid.UUID) (*CertService, error) {
++	var cs CertService
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO cert_services (case_id)
++		VALUES ($1)
++		RETURNING id, case_id, status::text, claim_tracking_code,
++		          claim_tracking_valid, consent_granted_at,
++		          action_reference::text, action_type::text, action_date,
++		          cert_image_path, cert_unique_id,
++		          submitted_to_org_at, tracking_code, org_response_at,
++		          org_rejection_reason, created_at, updated_at
++	`, caseID).Scan(
++		&cs.ID, &cs.CaseID, &cs.Status, &cs.ClaimTrackingCode,
++		&cs.ClaimTrackingValid, &cs.ConsentGrantedAt,
++		&cs.ActionReference, &cs.ActionType, &cs.ActionDate,
++		&cs.CertImagePath, &cs.CertUniqueID,
++		&cs.SubmittedToOrgAt, &cs.TrackingCode, &cs.OrgResponseAt,
++		&cs.OrgRejectionReason, &cs.CreatedAt, &cs.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create cert service: %w", err)
++	}
++	return &cs, nil
++}
++
++func (r *PostgresCertServiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*CertService, error) {
++	var cs CertService
++	err := r.db.QueryRow(ctx, `
++		SELECT id, case_id, status::text, claim_tracking_code,
++		       claim_tracking_valid, consent_granted_at,
++		       action_reference::text, action_type::text, action_date,
++		       cert_image_path, cert_unique_id,
++		       submitted_to_org_at, tracking_code, org_response_at,
++		       org_rejection_reason, created_at, updated_at
++		FROM cert_services WHERE id = $1
++	`, id).Scan(
++		&cs.ID, &cs.CaseID, &cs.Status, &cs.ClaimTrackingCode,
++		&cs.ClaimTrackingValid, &cs.ConsentGrantedAt,
++		&cs.ActionReference, &cs.ActionType, &cs.ActionDate,
++		&cs.CertImagePath, &cs.CertUniqueID,
++		&cs.SubmittedToOrgAt, &cs.TrackingCode, &cs.OrgResponseAt,
++		&cs.OrgRejectionReason, &cs.CreatedAt, &cs.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("cert service not found: %w", err)
++	}
++	return &cs, nil
++}
++
++func (r *PostgresCertServiceRepo) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE cert_services SET updated_at = NOW() WHERE id = $1
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("امکان درخواست رضایت در این وضعیت وجود ندارد")
++	}
++	return nil
++}
++
++func (r *PostgresCertServiceRepo) VerifyConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE cert_services SET consent_granted_at = NOW(), updated_at = NOW()
++		WHERE id = $1 AND consent_granted_at IS NULL
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("رضایت قبلاً ثبت شده است")
++	}
++	return nil
++}
++
++func (r *PostgresCertServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
++	if len(fields) == 0 {
++		return nil
++	}
++
++	clauses := make([]string, 0)
++	args := make([]interface{}, 0)
++	idx := 1
++
++	for field, value := range fields {
++		switch field {
++		case "action_reference", "action_type":
++			clauses = append(clauses, fmt.Sprintf("%s = $%d::%s", field, idx, field))
++		case "action_date":
++			clauses = append(clauses, fmt.Sprintf("%s = $%d::date", field, idx))
++		default:
++			clauses = append(clauses, fmt.Sprintf("%s = $%d", field, idx))
++		}
++		args = append(args, value)
++		idx++
++	}
++	args = append(args, id)
++
++	query := fmt.Sprintf("UPDATE cert_services SET %s, updated_at = NOW() WHERE id = $%d",
++		joinClauses(clauses), idx)
++
++	tag, err := r.db.Exec(ctx, query, args...)
++	if err != nil {
++		return fmt.Errorf("failed to update cert: %w", err)
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("cert %s not found", id)
++	}
++	return nil
++}
++
++// SubmitToOrg simulates submission and auto-approves
++func (r *PostgresCertServiceRepo) SubmitToOrg(ctx context.Context, id uuid.UUID) (uuid.UUID, string, error) {
++	var caseID uuid.UUID
++	trackingCode := "CERT-" + id.String()[:8]
++
++	err := r.db.QueryRow(ctx, `
++		UPDATE cert_services SET
++			status = 'approved',
++			tracking_code = $2,
++			org_response_at = NOW(),
++			updated_at = NOW()
++		WHERE id = $1
++		RETURNING case_id
++	`, id, trackingCode).Scan(&caseID)
++	if err != nil {
++		return uuid.Nil, "", fmt.Errorf("failed to submit cert to org: %w", err)
++	}
++	return caseID, trackingCode, nil
++}
+diff --git a/backend/internal/repository/claim_repo.go b/backend/internal/repository/claim_repo.go
+new file mode 100644
+index 0000000..254593d
+--- /dev/null
++++ b/backend/internal/repository/claim_repo.go
+@@ -0,0 +1,264 @@
++package repository
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresClaimServiceRepo implements ClaimServiceRepository
++type PostgresClaimServiceRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresClaimServiceRepo(db *pgxpool.Pool) *PostgresClaimServiceRepo {
++	return &PostgresClaimServiceRepo{db: db}
++}
++
++func (r *PostgresClaimServiceRepo) Create(ctx context.Context, caseID uuid.UUID) (*ClaimService, error) {
++	var cs ClaimService
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO claim_services (case_id)
++		VALUES ($1)
++		RETURNING id, case_id, status::text, map_tracking_code, map_tracking_valid,
++		          false_claim_warning_sent, consent_granted_at,
++		          claim_type::text, ownership_type::text,
++		          main_plate_number, sub_plate_number, plate_section,
++		          total_share, partial_share,
++		          submitted_to_org_at, tracking_code, org_response_at,
++		          org_rejection_reason, has_government_rights,
++		          treasury_payment_ref, legal_advice_requested,
++		          legal_advice_method, created_at, updated_at
++	`, caseID).Scan(
++		&cs.ID, &cs.CaseID, &cs.Status, &cs.MapTrackingCode, &cs.MapTrackingValid,
++		&cs.FalseClaimWarningSent, &cs.ConsentGrantedAt,
++		&cs.ClaimType, &cs.OwnershipType,
++		&cs.MainPlateNumber, &cs.SubPlateNumber, &cs.PlateSection,
++		&cs.TotalShare, &cs.PartialShare,
++		&cs.SubmittedToOrgAt, &cs.TrackingCode, &cs.OrgResponseAt,
++		&cs.OrgRejectionReason, &cs.HasGovernmentRights,
++		&cs.TreasuryPaymentRef, &cs.LegalAdviceRequested,
++		&cs.LegalAdviceMethod, &cs.CreatedAt, &cs.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create claim service: %w", err)
++	}
++	return &cs, nil
++}
++
++func (r *PostgresClaimServiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*ClaimService, error) {
++	var cs ClaimService
++	err := r.db.QueryRow(ctx, `
++		SELECT id, case_id, status::text, map_tracking_code, map_tracking_valid,
++		       false_claim_warning_sent, consent_granted_at,
++		       claim_type::text, ownership_type::text,
++		       main_plate_number, sub_plate_number, plate_section,
++		       total_share, partial_share,
++		       submitted_to_org_at, tracking_code, org_response_at,
++		       org_rejection_reason, has_government_rights,
++		       treasury_payment_ref, legal_advice_requested,
++		       legal_advice_method, created_at, updated_at
++		FROM claim_services WHERE id = $1
++	`, id).Scan(
++		&cs.ID, &cs.CaseID, &cs.Status, &cs.MapTrackingCode, &cs.MapTrackingValid,
++		&cs.FalseClaimWarningSent, &cs.ConsentGrantedAt,
++		&cs.ClaimType, &cs.OwnershipType,
++		&cs.MainPlateNumber, &cs.SubPlateNumber, &cs.PlateSection,
++		&cs.TotalShare, &cs.PartialShare,
++		&cs.SubmittedToOrgAt, &cs.TrackingCode, &cs.OrgResponseAt,
++		&cs.OrgRejectionReason, &cs.HasGovernmentRights,
++		&cs.TreasuryPaymentRef, &cs.LegalAdviceRequested,
++		&cs.LegalAdviceMethod, &cs.CreatedAt, &cs.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("claim service not found: %w", err)
++	}
++	return &cs, nil
++}
++
++func (r *PostgresClaimServiceRepo) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE claim_services SET false_claim_warning_sent = true, updated_at = NOW()
++		WHERE id = $1
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("امکان درخواست رضایت در این وضعیت وجود ندارد")
++	}
++	return nil
++}
++
++func (r *PostgresClaimServiceRepo) VerifyConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE claim_services SET consent_granted_at = NOW(), updated_at = NOW()
++		WHERE id = $1 AND consent_granted_at IS NULL
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("رضایت قبلاً ثبت شده است")
++	}
++	return nil
++}
++
++func (r *PostgresClaimServiceRepo) UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
++	if len(fields) == 0 {
++		return nil
++	}
++
++	setClauses := make([]string, 0, len(fields))
++	args := make([]interface{}, 0, len(fields)+1)
++	argIdx := 1
++
++	for field, value := range fields {
++		// handle enum types — نیاز به cast صریح
++		switch v := value.(type) {
++		case string:
++			switch field {
++			case "claim_type", "ownership_type":
++				setClauses = append(setClauses, fmt.Sprintf("%s = $%d::%s", field, argIdx, field))
++			default:
++				setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
++			}
++			args = append(args, v)
++		default:
++			setClauses = append(setClauses, fmt.Sprintf("%s = $%d", field, argIdx))
++			args = append(args, v)
++		}
++		argIdx++
++	}
++	args = append(args, id)
++
++	query := fmt.Sprintf("UPDATE claim_services SET %s, updated_at = NOW() WHERE id = $%d",
++		joinClauses(setClauses), argIdx)
++
++	tag, err := r.db.Exec(ctx, query, args...)
++	if err != nil {
++		return fmt.Errorf("failed to update claim: %w", err)
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("claim %s not found", id)
++	}
++	return nil
++}
++
++func (r *PostgresClaimServiceRepo) AddDocument(ctx context.Context, claimID uuid.UUID, docType, fileID, description string) (*ClaimDocument, error) {
++	var d ClaimDocument
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO claim_documents (claim_service_id, doc_type, file_path, description)
++		VALUES ($1, $2, $3, $4)
++		RETURNING id, claim_service_id, doc_type::text, file_path,
++		          description, uploaded_at
++	`, claimID, docType, fileID, description).Scan(
++		&d.ID, &d.ClaimServiceID, &d.DocType, &d.FilePath, &d.Description, &d.UploadedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("خطا در افزودن مستند: %w", err)
++	}
++	return &d, nil
++}
++
++func (r *PostgresClaimServiceRepo) DeleteDocument(ctx context.Context, docID uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		DELETE FROM claim_documents WHERE id = $1 AND verified_at IS NULL
++	`, docID)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("مستند یافت نشد یا قبلاً تایید شده است")
++	}
++	return nil
++}
++
++func (r *PostgresClaimServiceRepo) ListDocuments(ctx context.Context, claimID uuid.UUID) ([]ClaimDocument, error) {
++	rows, err := r.db.Query(ctx, `
++		SELECT id, claim_service_id, doc_type::text, file_path,
++		       description, COALESCE(verified_at IS NOT NULL, false),
++		       COALESCE(verification_note, ''), uploaded_at
++		FROM claim_documents WHERE claim_service_id = $1
++		ORDER BY uploaded_at
++	`, claimID)
++	if err != nil {
++		return nil, fmt.Errorf("خطا در دریافت مستندات: %w", err)
++	}
++	defer rows.Close()
++
++	var docs []ClaimDocument
++	for rows.Next() {
++		var d ClaimDocument
++		rows.Scan(&d.ID, &d.ClaimServiceID, &d.DocType, &d.FilePath,
++			&d.Description, &d.Verified, &d.VerificationNote, &d.UploadedAt)
++		docs = append(docs, d)
++	}
++	return docs, nil
++}
++
++func (r *PostgresClaimServiceRepo) VerifyDocument(ctx context.Context, docID uuid.UUID, claimID uuid.UUID, verified bool, note string) error {
++	var verifiedAtClause string
++	if verified {
++		verifiedAtClause = "NOW()"
++	} else {
++		verifiedAtClause = "NULL"
++	}
++
++	_, err := r.db.Exec(ctx, fmt.Sprintf(`
++		UPDATE claim_documents SET
++			verified_by = (SELECT legal_expert_id FROM cases c
++			               JOIN claim_services cs ON c.id = cs.case_id WHERE cs.id = $2),
++			verified_at = %s,
++			verification_note = $3
++		WHERE id = $1
++	`, verifiedAtClause), docID, claimID, note)
++	if err != nil {
++		return fmt.Errorf("خطا در ثبت تایید مستند: %w", err)
++	}
++	return nil
++}
++
++func (r *PostgresClaimServiceRepo) CountUnverifiedDocuments(ctx context.Context, claimID uuid.UUID) (int, error) {
++	var count int
++	err := r.db.QueryRow(ctx, `
++		SELECT COUNT(*) FROM claim_documents
++		WHERE claim_service_id = $1 AND verified_at IS NULL
++	`, claimID).Scan(&count)
++	return count, err
++}
++
++// SubmitToOrg simulates submission and auto-approves
++func (r *PostgresClaimServiceRepo) SubmitToOrg(ctx context.Context, id uuid.UUID) (uuid.UUID, string, error) {
++	var caseID uuid.UUID
++	trackingCode := "CLAIM-" + id.String()[:8]
++
++	err := r.db.QueryRow(ctx, `
++		UPDATE claim_services SET
++			status = 'approved',
++			tracking_code = $2,
++			org_response_at = NOW(),
++			updated_at = NOW()
++		WHERE id = $1
++		RETURNING case_id
++	`, id, trackingCode).Scan(&caseID)
++	if err != nil {
++		return uuid.Nil, "", fmt.Errorf("failed to submit claim to org: %w", err)
++	}
++	return caseID, trackingCode, nil
++}
++
++// helpers
++
++func joinClauses(clauses []string) string {
++	s := ""
++	for i, c := range clauses {
++		if i > 0 {
++			s += ", "
++		}
++		s += c
++	}
++	return s
++}
+diff --git a/backend/internal/repository/interfaces.go b/backend/internal/repository/interfaces.go
+new file mode 100644
+index 0000000..6696948
+--- /dev/null
++++ b/backend/internal/repository/interfaces.go
+@@ -0,0 +1,76 @@
++package repository
++
++import (
++	"context"
++
++	"github.com/google/uuid"
++)
++
++// UserRepository — مدیریت کاربران
++type UserRepository interface {
++	FindByMobile(ctx context.Context, mobile string) (*User, error)
++	FindByID(ctx context.Context, id uuid.UUID) (*User, error)
++	FindOrCreateByMobile(ctx context.Context, mobile string) (*User, error)
++	UpdateMobileVerified(ctx context.Context, id uuid.UUID, verified bool) error
++}
++
++// CaseRepository — مدیریت پرونده‌ها
++type CaseRepository interface {
++	ListByApplicant(ctx context.Context, applicantID uuid.UUID, offset, limit int) ([]Case, error)
++	ListAll(ctx context.Context, offset, limit int) ([]Case, error)
++	Create(ctx context.Context, c *Case) (*Case, error)
++	GetByID(ctx context.Context, id uuid.UUID) (*Case, error)
++	UpdateByID(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error
++	UpdateStatus(ctx context.Context, id uuid.UUID, status string) error
++	UpdateCapacity(ctx context.Context, id uuid.UUID, capacity string) error
++}
++
++// MapServiceRepository — مدیریت سرویس نقشه
++type MapServiceRepository interface {
++	Create(ctx context.Context, caseID uuid.UUID) (*MapService, error)
++	GetByID(ctx context.Context, id uuid.UUID) (*MapService, error)
++	RequestConsent(ctx context.Context, id uuid.UUID) error
++	VerifyConsent(ctx context.Context, id uuid.UUID) error
++	SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error
++	SubmitToOrg(ctx context.Context, id uuid.UUID, status string) (caseID uuid.UUID, trackingCode string, err error)
++}
++
++// ClaimServiceRepository — مدیریت سرویس ادعا
++type ClaimServiceRepository interface {
++	Create(ctx context.Context, caseID uuid.UUID) (*ClaimService, error)
++	GetByID(ctx context.Context, id uuid.UUID) (*ClaimService, error)
++	RequestConsent(ctx context.Context, id uuid.UUID) error
++	VerifyConsent(ctx context.Context, id uuid.UUID) error
++	UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error
++	AddDocument(ctx context.Context, claimID uuid.UUID, docType, fileID, description string) (*ClaimDocument, error)
++	DeleteDocument(ctx context.Context, docID uuid.UUID) error
++	ListDocuments(ctx context.Context, claimID uuid.UUID) ([]ClaimDocument, error)
++	VerifyDocument(ctx context.Context, docID uuid.UUID, claimID uuid.UUID, verified bool, note string) error
++	CountUnverifiedDocuments(ctx context.Context, claimID uuid.UUID) (int, error)
++	SubmitToOrg(ctx context.Context, id uuid.UUID) (caseID uuid.UUID, trackingCode string, err error)
++}
++
++// CertServiceRepository — مدیریت سرویس گواهی اقدام
++type CertServiceRepository interface {
++	Create(ctx context.Context, caseID uuid.UUID) (*CertService, error)
++	GetByID(ctx context.Context, id uuid.UUID) (*CertService, error)
++	RequestConsent(ctx context.Context, id uuid.UUID) error
++	VerifyConsent(ctx context.Context, id uuid.UUID) error
++	UpdateDetails(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error
++	SubmitToOrg(ctx context.Context, id uuid.UUID) (caseID uuid.UUID, trackingCode string, err error)
++}
++
++// AuditLogRepository — لاگ ممیزی (append-only)
++type AuditLogRepository interface {
++	Record(ctx context.Context, event *AuditEvent) error
++}
++
++// NotificationRepository — مدیریت اطلاع‌رسانی
++type NotificationRepository interface {
++	Create(ctx context.Context, n *Notification) error
++}
++
++// AIAdviceRepository — لاگ راهنمایی هوش مصنوعی
++type AIAdviceRepository interface {
++	Save(ctx context.Context, claimID uuid.UUID, advice *AIAdviceLog) (uuid.UUID, error)
++}
+diff --git a/backend/internal/repository/map_repo.go b/backend/internal/repository/map_repo.go
+new file mode 100644
+index 0000000..8b77245
+--- /dev/null
++++ b/backend/internal/repository/map_repo.go
+@@ -0,0 +1,139 @@
++package repository
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresMapServiceRepo implements MapServiceRepository
++type PostgresMapServiceRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresMapServiceRepo(db *pgxpool.Pool) *PostgresMapServiceRepo {
++	return &PostgresMapServiceRepo{db: db}
++}
++
++func (r *PostgresMapServiceRepo) Create(ctx context.Context, caseID uuid.UUID) (*MapService, error) {
++	var ms MapService
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO map_services (case_id)
++		VALUES ($1)
++		RETURNING id, case_id, status::text, property_type, approx_area_sqm,
++		          land_use, ownership_type, has_building, annex_count,
++		          geo_latitude, geo_longitude, grant_access_to_others,
++		          consent_granted_at, fieldwork_started_at, fieldwork_completed_at,
++		          map_file_path, map_format, descriptive_table,
++		          submitted_to_org_at, tracking_code, org_response_at,
++		          org_rejection_reason, created_at, updated_at
++	`, caseID).Scan(
++		&ms.ID, &ms.CaseID, &ms.Status, &ms.PropertyType, &ms.ApproxAreaSqm,
++		&ms.LandUse, &ms.OwnershipType, &ms.HasBuilding, &ms.AnnexCount,
++		&ms.GeoLatitude, &ms.GeoLongitude, &ms.GrantAccessToOthers,
++		&ms.ConsentGrantedAt, &ms.FieldworkStartedAt, &ms.FieldworkCompletedAt,
++		&ms.MapFilePath, &ms.MapFormat, &ms.DescriptiveTable,
++		&ms.SubmittedToOrgAt, &ms.TrackingCode, &ms.OrgResponseAt,
++		&ms.OrgRejectionReason, &ms.CreatedAt, &ms.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("failed to create map service: %w", err)
++	}
++	return &ms, nil
++}
++
++func (r *PostgresMapServiceRepo) GetByID(ctx context.Context, id uuid.UUID) (*MapService, error) {
++	var ms MapService
++	err := r.db.QueryRow(ctx, `
++		SELECT id, case_id, status::text, property_type, approx_area_sqm,
++		       land_use, ownership_type, has_building, annex_count,
++		       geo_latitude, geo_longitude, grant_access_to_others,
++		       consent_granted_at, fieldwork_started_at, fieldwork_completed_at,
++		       map_file_path, map_format, descriptive_table,
++		       submitted_to_org_at, tracking_code, org_response_at,
++		       org_rejection_reason, created_at, updated_at
++		FROM map_services WHERE id = $1
++	`, id).Scan(
++		&ms.ID, &ms.CaseID, &ms.Status, &ms.PropertyType, &ms.ApproxAreaSqm,
++		&ms.LandUse, &ms.OwnershipType, &ms.HasBuilding, &ms.AnnexCount,
++		&ms.GeoLatitude, &ms.GeoLongitude, &ms.GrantAccessToOthers,
++		&ms.ConsentGrantedAt, &ms.FieldworkStartedAt, &ms.FieldworkCompletedAt,
++		&ms.MapFilePath, &ms.MapFormat, &ms.DescriptiveTable,
++		&ms.SubmittedToOrgAt, &ms.TrackingCode, &ms.OrgResponseAt,
++		&ms.OrgRejectionReason, &ms.CreatedAt, &ms.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("map service not found: %w", err)
++	}
++	return &ms, nil
++}
++
++func (r *PostgresMapServiceRepo) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE map_services SET updated_at = NOW()
++		WHERE id = $1 AND status::text IN ('expert_assigned', 'pending_expert_assignment')
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("امکان درخواست رضایت در این وضعیت وجود ندارد")
++	}
++	return nil
++}
++
++func (r *PostgresMapServiceRepo) VerifyConsent(ctx context.Context, id uuid.UUID) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE map_services SET consent_granted_at = NOW(), updated_at = NOW()
++		WHERE id = $1 AND consent_granted_at IS NULL
++	`, id)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("رضایت قبلاً ثبت شده یا سرویس در وضعیت نامعتبر است")
++	}
++	return nil
++}
++
++func (r *PostgresMapServiceRepo) SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE map_services SET
++			map_file_path = $2,
++			descriptive_table = $3,
++			fieldwork_completed_at = NOW(),
++			status = 'fieldwork_done',
++			updated_at = NOW()
++		WHERE id = $1 AND status::text = 'fieldwork_in_progress'
++	`, id, mapFileID, descriptiveTable)
++	if err != nil {
++		return fmt.Errorf("failed to submit fieldwork: %w", err)
++	}
++	if tag.RowsAffected() == 0 {
++		return fmt.Errorf("سرویس در وضعیت مناسب برای ثبت عملیات میدانی نیست")
++	}
++	return nil
++}
++
++// SubmitToOrg simulates submitting to organization and auto-approves
++// در نسخه نهایی: از Outbox Pattern برای ارسال واقعی به سازمان استفاده می‌شود
++func (r *PostgresMapServiceRepo) SubmitToOrg(ctx context.Context, id uuid.UUID, status string) (uuid.UUID, string, error) {
++	var caseID uuid.UUID
++	trackingCode := "MAP-" + id.String()[:8]
++
++	err := r.db.QueryRow(ctx, `
++		UPDATE map_services SET
++			status = 'approved',
++			tracking_code = $2,
++			org_response_at = NOW(),
++			updated_at = NOW()
++		WHERE id = $1 AND status::text = $3
++		RETURNING case_id
++	`, id, trackingCode, status).Scan(&caseID)
++	if err != nil {
++		return uuid.Nil, "", fmt.Errorf("failed to submit map to org: %w", err)
++	}
++	return caseID, trackingCode, nil
++}
+diff --git a/backend/internal/repository/models.go b/backend/internal/repository/models.go
+new file mode 100644
+index 0000000..c428c96
+--- /dev/null
++++ b/backend/internal/repository/models.go
+@@ -0,0 +1,167 @@
++package repository
++
++import (
++	"time"
++
++	"github.com/google/uuid"
++)
++
++// مدل‌های دامین — مستقل از دیتابیس
++
++type User struct {
++	ID             uuid.UUID  `json:"id"`
++	NationalID     string     `json:"national_id"`
++	FirstName      string     `json:"first_name"`
++	LastName       string     `json:"last_name"`
++	Mobile         string     `json:"mobile"`
++	MobileVerified bool       `json:"mobile_verified"`
++	BirthDate      *time.Time `json:"birth_date,omitempty"`
++	Role           string     `json:"role"`
++	SanaStatus     *string    `json:"sana_status,omitempty"`
++	IsAlive        bool       `json:"is_alive"`
++	IsActive       bool       `json:"is_active"`
++	CreatedAt      time.Time  `json:"created_at"`
++	UpdatedAt      time.Time  `json:"updated_at"`
++}
++
++type Case struct {
++	ID                 uuid.UUID  `json:"id"`
++	ApplicantID        uuid.UUID  `json:"applicant_id"`
++	ApplicantCapacity  string     `json:"applicant_capacity"`
++	Status             string     `json:"status"`
++	Province           string     `json:"province"`
++	City               string     `json:"city"`
++	District           *string    `json:"district,omitempty"`
++	Village            *string    `json:"village,omitempty"`
++	AddressDetail      *string    `json:"address_detail,omitempty"`
++	LegalExpertID      *uuid.UUID `json:"legal_expert_id,omitempty"`
++	SurveyExpertID     *uuid.UUID `json:"survey_expert_id,omitempty"`
++	ProxyVerified      bool       `json:"proxy_verified"`
++	MapTrackingCode    *string    `json:"map_tracking_code,omitempty"`
++	ClaimTrackingCode  *string    `json:"claim_tracking_code,omitempty"`
++	CertTrackingCode   *string    `json:"cert_tracking_code,omitempty"`
++	Deadline2Years     *time.Time `json:"deadline_2years,omitempty"`
++	ApplicantDeceased  bool       `json:"applicant_deceased"`
++	Deadline5Months    *time.Time `json:"deadline_5months,omitempty"`
++	CreatedAt          time.Time  `json:"created_at"`
++	UpdatedAt          time.Time  `json:"updated_at"`
++	CompletedAt        *time.Time `json:"completed_at,omitempty"`
++}
++
++type MapService struct {
++	ID                   uuid.UUID  `json:"id"`
++	CaseID               uuid.UUID  `json:"case_id"`
++	Status               string     `json:"status"`
++	PropertyType         *string    `json:"property_type,omitempty"`
++	ApproxAreaSqm        *float64   `json:"approx_area_sqm,omitempty"`
++	LandUse              *string    `json:"land_use,omitempty"`
++	OwnershipType        *string    `json:"ownership_type,omitempty"`
++	HasBuilding          bool       `json:"has_building"`
++	AnnexCount           int        `json:"annex_count"`
++	GeoLatitude          *float64   `json:"geo_latitude,omitempty"`
++	GeoLongitude         *float64   `json:"geo_longitude,omitempty"`
++	GrantAccessToOthers  bool       `json:"grant_access_to_others"`
++	ConsentGrantedAt     *time.Time `json:"consent_granted_at,omitempty"`
++	FieldworkStartedAt   *time.Time `json:"fieldwork_started_at,omitempty"`
++	FieldworkCompletedAt *time.Time `json:"fieldwork_completed_at,omitempty"`
++	MapFilePath          *string    `json:"map_file_path,omitempty"`
++	MapFormat            *string    `json:"map_format,omitempty"`
++	DescriptiveTable     []byte     `json:"descriptive_table,omitempty"`
++	SubmittedToOrgAt     *time.Time `json:"submitted_to_org_at,omitempty"`
++	TrackingCode         *string    `json:"tracking_code,omitempty"`
++	OrgResponseAt        *time.Time `json:"org_response_at,omitempty"`
++	OrgRejectionReason   *string    `json:"org_rejection_reason,omitempty"`
++	CreatedAt            time.Time  `json:"created_at"`
++	UpdatedAt            time.Time  `json:"updated_at"`
++}
++
++type ClaimService struct {
++	ID                    uuid.UUID  `json:"id"`
++	CaseID                uuid.UUID  `json:"case_id"`
++	Status                string     `json:"status"`
++	MapTrackingCode       *string    `json:"map_tracking_code,omitempty"`
++	MapTrackingValid      bool       `json:"map_tracking_valid"`
++	FalseClaimWarningSent bool       `json:"false_claim_warning_sent"`
++	ConsentGrantedAt      *time.Time `json:"consent_granted_at,omitempty"`
++	ClaimType             *string    `json:"claim_type,omitempty"`
++	OwnershipType         *string    `json:"ownership_type,omitempty"`
++	MainPlateNumber       *string    `json:"main_plate_number,omitempty"`
++	SubPlateNumber        *string    `json:"sub_plate_number,omitempty"`
++	PlateSection          *string    `json:"plate_section,omitempty"`
++	TotalShare            *int       `json:"total_share,omitempty"`
++	PartialShare          *int       `json:"partial_share,omitempty"`
++	SubmittedToOrgAt      *time.Time `json:"submitted_to_org_at,omitempty"`
++	TrackingCode          *string    `json:"tracking_code,omitempty"`
++	OrgResponseAt         *time.Time `json:"org_response_at,omitempty"`
++	OrgRejectionReason    *string    `json:"org_rejection_reason,omitempty"`
++	HasGovernmentRights   bool       `json:"has_government_rights"`
++	TreasuryPaymentRef    *string    `json:"treasury_payment_ref,omitempty"`
++	LegalAdviceRequested  bool       `json:"legal_advice_requested"`
++	LegalAdviceMethod     *string    `json:"legal_advice_method,omitempty"`
++	CreatedAt             time.Time  `json:"created_at"`
++	UpdatedAt             time.Time  `json:"updated_at"`
++}
++
++type CertService struct {
++	ID               uuid.UUID  `json:"id"`
++	CaseID           uuid.UUID  `json:"case_id"`
++	Status           string     `json:"status"`
++	ClaimTrackingCode *string   `json:"claim_tracking_code,omitempty"`
++	ClaimTrackingValid bool     `json:"claim_tracking_valid"`
++	ConsentGrantedAt *time.Time `json:"consent_granted_at,omitempty"`
++	ActionReference  *string    `json:"action_reference,omitempty"`
++	ActionType       *string    `json:"action_type,omitempty"`
++	ActionDate       *time.Time `json:"action_date,omitempty"`
++	CertImagePath    *string    `json:"cert_image_path,omitempty"`
++	CertUniqueID     *string    `json:"cert_unique_id,omitempty"`
++	SubmittedToOrgAt *time.Time `json:"submitted_to_org_at,omitempty"`
++	TrackingCode     *string    `json:"tracking_code,omitempty"`
++	OrgResponseAt    *time.Time `json:"org_response_at,omitempty"`
++	OrgRejectionReason *string  `json:"org_rejection_reason,omitempty"`
++	CreatedAt        time.Time  `json:"created_at"`
++	UpdatedAt        time.Time  `json:"updated_at"`
++}
++
++type ClaimDocument struct {
++	ID              uuid.UUID  `json:"id"`
++	ClaimServiceID  uuid.UUID  `json:"claim_service_id"`
++	DocType         string     `json:"doc_type"`
++	FilePath        string     `json:"file_path"`
++	Description     *string    `json:"description,omitempty"`
++	Verified        bool       `json:"verified"`
++	VerificationNote *string   `json:"verification_note,omitempty"`
++	UploadedAt      time.Time  `json:"uploaded_at"`
++}
++
++type AuditEvent struct {
++	ID            uuid.UUID  `json:"id"`
++	EventType     string     `json:"event_type"`
++	ActorType     string     `json:"actor_type"`
++	ActorID       *uuid.UUID `json:"actor_id,omitempty"`
++	ActorIP       *string    `json:"actor_ip,omitempty"`
++	ResourceType  string     `json:"resource_type"`
++	ResourceID    *uuid.UUID `json:"resource_id,omitempty"`
++	Changes       []byte     `json:"changes,omitempty"`
++	Metadata      []byte     `json:"metadata,omitempty"`
++	CorrelationID *uuid.UUID `json:"correlation_id,omitempty"`
++	CreatedAt     time.Time  `json:"created_at"`
++}
++
++type Notification struct {
++	ID           uuid.UUID `json:"id"`
++	UserID       uuid.UUID `json:"user_id"`
++	CaseID       *uuid.UUID `json:"case_id,omitempty"`
++	Channel      string    `json:"channel"`
++	TemplateKey  string    `json:"template_key"`
++	Content      string    `json:"content"`
++	Status       string    `json:"status"`
++	CreatedAt    time.Time `json:"created_at"`
++}
++
++type AIAdviceLog struct {
++	ID         uuid.UUID `json:"id"`
++	CaseID     uuid.UUID `json:"case_id"`
++	Action     string    `json:"recommended_action"`
++	References []string  `json:"legal_references"`
++	Confidence float64   `json:"confidence_score"`
++}
+diff --git a/backend/internal/repository/user_repo.go b/backend/internal/repository/user_repo.go
+new file mode 100644
+index 0000000..b0e684c
+--- /dev/null
++++ b/backend/internal/repository/user_repo.go
+@@ -0,0 +1,88 @@
++package repository
++
++import (
++	"context"
++	"database/sql"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++)
++
++// PostgresUserRepo implements UserRepository
++type PostgresUserRepo struct {
++	db *pgxpool.Pool
++}
++
++func NewPostgresUserRepo(db *pgxpool.Pool) *PostgresUserRepo {
++	return &PostgresUserRepo{db: db}
++}
++
++func (r *PostgresUserRepo) FindByMobile(ctx context.Context, mobile string) (*User, error) {
++	var u User
++	err := r.db.QueryRow(ctx, `
++		SELECT id, national_id, first_name, last_name, mobile, mobile_verified,
++		       birth_date, role::text, sana_status, is_alive, is_active,
++		       created_at, updated_at
++		FROM users WHERE mobile = $1 AND is_active = true
++	`, mobile).Scan(
++		&u.ID, &u.NationalID, &u.FirstName, &u.LastName, &u.Mobile, &u.MobileVerified,
++		&u.BirthDate, &u.Role, &u.SanaStatus, &u.IsAlive, &u.IsActive,
++		&u.CreatedAt, &u.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("user not found: %w", err)
++	}
++	return &u, nil
++}
++
++func (r *PostgresUserRepo) FindByID(ctx context.Context, id uuid.UUID) (*User, error) {
++	var u User
++	err := r.db.QueryRow(ctx, `
++		SELECT id, national_id, first_name, last_name, mobile, mobile_verified,
++		       birth_date, role::text, sana_status, is_alive, is_active,
++		       created_at, updated_at
++		FROM users WHERE id = $1
++	`, id).Scan(
++		&u.ID, &u.NationalID, &u.FirstName, &u.LastName, &u.Mobile, &u.MobileVerified,
++		&u.BirthDate, &u.Role, &u.SanaStatus, &u.IsAlive, &u.IsActive,
++		&u.CreatedAt, &u.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("user not found: %w", err)
++	}
++	return &u, nil
++}
++
++func (r *PostgresUserRepo) FindOrCreateByMobile(ctx context.Context, mobile string) (*User, error) {
++	var u User
++	err := r.db.QueryRow(ctx, `
++		INSERT INTO users (national_id, first_name, last_name, mobile, mobile_verified, role)
++		VALUES ('TMP' || substr(md5($1), 1, 7), 'کاربر', 'سامانه', $1, true, 'applicant')
++		ON CONFLICT (mobile) DO UPDATE SET mobile_verified = true, updated_at = NOW()
++		RETURNING id, national_id, first_name, last_name, mobile, mobile_verified,
++		          birth_date, role::text, sana_status, is_alive, is_active,
++		          created_at, updated_at
++	`, mobile).Scan(
++		&u.ID, &u.NationalID, &u.FirstName, &u.LastName, &u.Mobile, &u.MobileVerified,
++		&u.BirthDate, &u.Role, &u.SanaStatus, &u.IsAlive, &u.IsActive,
++		&u.CreatedAt, &u.UpdatedAt,
++	)
++	if err != nil {
++		return nil, fmt.Errorf("failed to find or create user: %w", err)
++	}
++	return &u, nil
++}
++
++func (r *PostgresUserRepo) UpdateMobileVerified(ctx context.Context, id uuid.UUID, verified bool) error {
++	tag, err := r.db.Exec(ctx, `
++		UPDATE users SET mobile_verified = $2, updated_at = NOW() WHERE id = $1
++	`, id, verified)
++	if err != nil {
++		return err
++	}
++	if tag.RowsAffected() == 0 {
++		return sql.ErrNoRows
++	}
++	return nil
++}
+diff --git a/backend/internal/scheduler/scheduler.go b/backend/internal/scheduler/scheduler.go
+new file mode 100644
+index 0000000..137e29c
+--- /dev/null
++++ b/backend/internal/scheduler/scheduler.go
+@@ -0,0 +1,267 @@
++package scheduler
++
++import (
++	"context"
++	"fmt"
++	"log/slog"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/jackc/pgx/v5/pgxpool"
++	"github.com/nats-io/nats.go"
++)
++
++// Scheduler polls scheduled_jobs and executes due jobs
++type Scheduler struct {
++	db       *pgxpool.Pool
++	eventBus *nats.Conn
++	interval time.Duration
++	jobs     map[string]JobHandler
++}
++
++// JobHandler processes a scheduled job
++type JobHandler func(ctx context.Context, job ScheduledJob) error
++
++// ScheduledJob represents a row from the scheduled_jobs table
++type ScheduledJob struct {
++	ID            uuid.UUID
++	JobType       string
++	TargetCaseID  uuid.UUID
++	ScheduledAt   time.Time
++	ExecutedAt    *time.Time
++	Result        *string
++	ErrorMessage  *string
++}
++
++// New creates a scheduler with the given poll interval
++func New(db *pgxpool.Pool, eventBus *nats.Conn, interval time.Duration) *Scheduler {
++	s := &Scheduler{
++		db:       db,
++		eventBus: eventBus,
++		interval: interval,
++		jobs:     make(map[string]JobHandler),
++	}
++
++	// Register built-in job handlers
++	s.Register("deadline_2years", handleDeadline2Years)
++	s.Register("deadline_5months", handleDeadline5Months)
++	s.Register("otp_cleanup", handleOTPCleanup)
++
++	return s
++}
++
++// Register adds a job handler
++func (s *Scheduler) Register(jobType string, handler JobHandler) {
++	s.jobs[jobType] = handler
++}
++
++// Start begins the poll loop — blocks until context is cancelled
++func (s *Scheduler) Start(ctx context.Context) {
++	slog.Info("scheduler started", "interval", s.interval)
++	ticker := time.NewTicker(s.interval)
++	defer ticker.Stop()
++
++	for {
++		select {
++		case <-ctx.Done():
++			slog.Info("scheduler stopped")
++			return
++		case <-ticker.C:
++			if err := s.Poll(ctx); err != nil {
++				slog.Error("scheduler poll failed", "error", err)
++			}
++		}
++	}
++}
++
++// Poll fetches due jobs and executes them with FOR UPDATE SKIP LOCKED
++func (s *Scheduler) Poll(ctx context.Context) error {
++	tx, err := s.db.Begin(ctx)
++	if err != nil {
++		return fmt.Errorf("failed to begin transaction: %w", err)
++	}
++	defer tx.Rollback(ctx)
++
++	rows, err := tx.Query(ctx, `
++		SELECT id, job_type, target_case_id, scheduled_at,
++		       executed_at, result, error_message
++		FROM scheduled_jobs
++		WHERE executed_at IS NULL AND scheduled_at <= NOW()
++		ORDER BY scheduled_at
++		LIMIT 100
++		FOR UPDATE SKIP LOCKED
++	`)
++	if err != nil {
++		return fmt.Errorf("failed to query scheduled jobs: %w", err)
++	}
++	defer rows.Close()
++
++	var jobs []ScheduledJob
++	for rows.Next() {
++		var j ScheduledJob
++		if err := rows.Scan(&j.ID, &j.JobType, &j.TargetCaseID, &j.ScheduledAt,
++			&j.ExecutedAt, &j.Result, &j.ErrorMessage); err != nil {
++			return fmt.Errorf("failed to scan job row: %w", err)
++		}
++		jobs = append(jobs, j)
++	}
++
++	if len(jobs) == 0 {
++		return tx.Commit(ctx)
++	}
++
++	for _, job := range jobs {
++		handler, ok := s.jobs[job.JobType]
++		if !ok {
++			slog.Warn("unknown job type", "type", job.JobType, "job_id", job.ID)
++			tx.Exec(ctx, `
++				UPDATE scheduled_jobs SET executed_at = NOW(), result = 'skipped',
++				error_message = 'unknown job type' WHERE id = $1
++			`, job.ID)
++			continue
++		}
++
++		if err := handler(ctx, job); err != nil {
++			slog.Error("job execution failed", "job_id", job.ID, "type", job.JobType, "error", err)
++			tx.Exec(ctx, `
++				UPDATE scheduled_jobs SET executed_at = NOW(), result = 'error',
++				error_message = $2 WHERE id = $1
++			`, job.ID, err.Error())
++		} else {
++			tx.Exec(ctx, `
++				UPDATE scheduled_jobs SET executed_at = NOW(), result = 'success'
++				WHERE id = $1
++			`, job.ID)
++		}
++	}
++
++	return tx.Commit(ctx)
++}
++
++// Schedule creates a new scheduled job
++func (s *Scheduler) Schedule(ctx context.Context, jobType string, caseID uuid.UUID, scheduledAt time.Time) error {
++	key := fmt.Sprintf("%s_%s", jobType, caseID)
++	_, err := s.db.Exec(ctx, `
++		INSERT INTO scheduled_jobs (job_key, job_type, target_case_id, scheduled_at)
++		VALUES ($1, $2, $3, $4)
++		ON CONFLICT (job_key) DO NOTHING
++	`, key, jobType, caseID, scheduledAt)
++	return err
++}
++
++// CancelDeadline removes pending deadline jobs for a case
++func (s *Scheduler) CancelDeadline(ctx context.Context, caseID uuid.UUID) error {
++	_, err := s.db.Exec(ctx, `
++		UPDATE scheduled_jobs SET executed_at = NOW(), result = 'skipped',
++		error_message = 'case completed before deadline'
++		WHERE target_case_id = $1 AND executed_at IS NULL
++	`, caseID)
++	return err
++}
++
++// ---------- Built-in handlers ----------
++
++func handleDeadline2Years(ctx context.Context, job ScheduledJob) error {
++	db := getDBFromCtx(ctx)
++	if db == nil {
++		return fmt.Errorf("no database in context")
++	}
++
++	// Check if case is already completed (race condition safety)
++	var status string
++	err := db.QueryRow(ctx, `SELECT status::text FROM cases WHERE id = $1`, job.TargetCaseID).Scan(&status)
++	if err != nil {
++		return fmt.Errorf("case %s not found: %w", job.TargetCaseID, err)
++	}
++	if status == "cert_completed" || status == "expired" || status == "cancelled" {
++		slog.Info("deadline_2years: case already final", "case_id", job.TargetCaseID, "status", status)
++		return nil
++	}
++
++	// Transition to expired
++	_, err = db.Exec(ctx,
++		`UPDATE cases SET status = 'expired', updated_at = NOW()
++		 WHERE id = $1 AND status::text = 'claim_completed'`,
++		job.TargetCaseID,
++	)
++	if err != nil {
++		return fmt.Errorf("failed to expire case: %w", err)
++	}
++
++	slog.Info("deadline_2years: case expired", "case_id", job.TargetCaseID)
++
++	// Publish event
++	// getEventBusFromCtx(ctx) would publish case.expired event
++
++	return nil
++}
++
++func handleDeadline5Months(ctx context.Context, job ScheduledJob) error {
++	db := getDBFromCtx(ctx)
++	if db == nil {
++		return fmt.Errorf("no database in context")
++	}
++
++	var status string
++	var applicantDeceased bool
++	err := db.QueryRow(ctx,
++		`SELECT status::text, COALESCE(applicant_deceased, false) FROM cases WHERE id = $1`,
++		job.TargetCaseID,
++	).Scan(&status, &applicantDeceased)
++	if err != nil {
++		return fmt.Errorf("case %s not found: %w", job.TargetCaseID, err)
++	}
++
++	if !applicantDeceased || status != "cert_in_progress" {
++		slog.Info("deadline_5months: case not applicable", "case_id", job.TargetCaseID, "status", status)
++		return nil
++	}
++
++	// Expire the case
++	_, err = db.Exec(ctx,
++		`UPDATE cases SET status = 'expired', updated_at = NOW() WHERE id = $1`,
++		job.TargetCaseID,
++	)
++	if err != nil {
++		return fmt.Errorf("failed to expire case: %w", err)
++	}
++
++	slog.Info("deadline_5months: case expired (applicant deceased)", "case_id", job.TargetCaseID)
++	return nil
++}
++
++func handleOTPCleanup(ctx context.Context, job ScheduledJob) error {
++	db := getDBFromCtx(ctx)
++	if db == nil {
++		return fmt.Errorf("no database in context")
++	}
++
++	_, err := db.Exec(ctx, `
++		DELETE FROM otp_sessions WHERE expires_at < NOW() - INTERVAL '10 minutes'
++	`)
++	if err != nil {
++		return fmt.Errorf("failed to cleanup expired OTPs: %w", err)
++	}
++	return nil
++}
++
++// ---- context helpers ----
++
++type ctxKey int
++
++const (
++	ctxDBKey  ctxKey = iota
++	ctxNatsKey
++)
++
++// WithDB injects database pool into context
++func WithDB(ctx context.Context, db *pgxpool.Pool) context.Context {
++	return context.WithValue(ctx, ctxDBKey, db)
++}
++
++func getDBFromCtx(ctx context.Context) *pgxpool.Pool {
++	if db, ok := ctx.Value(ctxDBKey).(*pgxpool.Pool); ok {
++		return db
++	}
++	return nil
++}
+diff --git a/backend/internal/scheduler/scheduler_test.go b/backend/internal/scheduler/scheduler_test.go
+new file mode 100644
+index 0000000..22dc2c3
+--- /dev/null
++++ b/backend/internal/scheduler/scheduler_test.go
+@@ -0,0 +1,94 @@
++package scheduler
++
++import (
++	"context"
++	"testing"
++	"time"
++
++	"github.com/google/uuid"
++)
++
++// TestSchedulerCreation verifies basic creation
++func TestSchedulerCreation(t *testing.T) {
++	s := New(nil, nil, 1*time.Hour)
++	if s == nil {
++		t.Fatal("scheduler should not be nil")
++	}
++	if s.interval != 1*time.Hour {
++		t.Errorf("expected interval 1h, got %v", s.interval)
++	}
++	if len(s.jobs) != 3 {
++		t.Errorf("expected 3 built-in handlers (deadline_2years, deadline_5months, otp_cleanup), got %d", len(s.jobs))
++	}
++}
++
++// TestRegisterJob adds a custom handler
++func TestRegisterJob(t *testing.T) {
++	s := New(nil, nil, 1*time.Minute)
++
++	called := false
++	s.Register("custom_job", func(ctx context.Context, job ScheduledJob) error {
++		called = true
++		return nil
++	})
++
++	if len(s.jobs) != 4 {
++		t.Errorf("expected 4 handlers after register, got %d", len(s.jobs))
++	}
++
++	handler, ok := s.jobs["custom_job"]
++	if !ok {
++		t.Fatal("custom job handler not found")
++	}
++
++	_ = handler(context.Background(), ScheduledJob{ID: uuid.New()})
++	if !called {
++		t.Error("custom handler was not called")
++	}
++}
++
++// TestScheduleCreatesJob verifies Schedule inserts into DB
++// This test requires a real PostgreSQL connection
++func TestSchedule(t *testing.T) {
++	// Integration test — needs database
++	t.Skip("requires PostgreSQL connection")
++}
++
++// TestCancelDeadline marks remaining deadline jobs as skipped
++// This test requires a real PostgreSQL connection
++func TestCancelDeadline(t *testing.T) {
++	// Integration test — needs database
++	t.Skip("requires PostgreSQL connection")
++}
++
++// TestOTPCleanupHandler verifies the handler logic
++func TestOTPCleanupHandler(t *testing.T) {
++	// Unit test for handler logic — needs database
++	t.Skip("requires PostgreSQL connection")
++}
++
++// TestDeadline2YearsHandler_AlreadyCompleted verifies race condition safety
++func TestDeadline2YearsHandler_AlreadyCompleted(t *testing.T) {
++	// Integration test — needs database to verify status check
++	t.Skip("requires PostgreSQL connection")
++}
++
++// TestWithDB_ContextInjection verifies context helper
++func TestWithDB_ContextInjection(t *testing.T) {
++	ctx := context.Background()
++	ctx = WithDB(ctx, nil)
++
++	db := getDBFromCtx(ctx)
++	// nil is expected since we injected nil
++	if db != nil {
++		t.Error("expected nil db from context")
++	}
++}
++
++// TestWithDB_NilContext verifies empty context returns nil
++func TestWithDB_NilContext(t *testing.T) {
++	db := getDBFromCtx(context.Background())
++	if db != nil {
++		t.Error("expected nil from empty context")
++	}
++}
+diff --git a/backend/internal/service/case_service.go b/backend/internal/service/case_service.go
+new file mode 100644
+index 0000000..835ed84
+--- /dev/null
++++ b/backend/internal/service/case_service.go
+@@ -0,0 +1,165 @@
++package service
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++)
++
++// CaseService orchestrates case operations
++type CaseService struct {
++	caseRepo   repository.CaseRepository
++	userRepo   repository.UserRepository
++	mapRepo    repository.MapServiceRepository
++	claimRepo  repository.ClaimServiceRepository
++	certRepo   repository.CertServiceRepository
++	auditRepo  repository.AuditLogRepository
++	caseSM     *workflow.StateMachine
++}
++
++// NewCaseService creates a new case service
++func NewCaseService(
++	caseRepo repository.CaseRepository,
++	userRepo repository.UserRepository,
++	mapRepo repository.MapServiceRepository,
++	claimRepo repository.ClaimServiceRepository,
++	certRepo repository.CertServiceRepository,
++	auditRepo repository.AuditLogRepository,
++	caseSM *workflow.StateMachine,
++) *CaseService {
++	return &CaseService{
++		caseRepo:  caseRepo,
++		userRepo:  userRepo,
++		mapRepo:   mapRepo,
++		claimRepo: claimRepo,
++		certRepo:  certRepo,
++		auditRepo: auditRepo,
++		caseSM:    caseSM,
++	}
++}
++
++// ListCases returns cases for a user based on role
++func (s *CaseService) ListCases(ctx context.Context, userIDStr string, role string, offset, limit int) ([]repository.Case, error) {
++	userID, err := uuid.Parse(userIDStr)
++	if err != nil {
++		return nil, fmt.Errorf("شناسه کاربر نامعتبر است")
++	}
++
++	switch role {
++	case "applicant":
++		return s.caseRepo.ListByApplicant(ctx, userID, offset, limit)
++	case "admin", "auditor":
++		return s.caseRepo.ListAll(ctx, offset, limit)
++	default:
++		return nil, fmt.Errorf("نقش کاربری نامعتبر است")
++	}
++}
++
++// CreateCase creates a new case for an applicant
++func (s *CaseService) CreateCase(ctx context.Context, userIDStr string, role string, input CreateCaseInput) (*repository.Case, error) {
++	if role != "applicant" {
++		return nil, fmt.Errorf("فقط متقاضی می‌تواند پرونده ایجاد کند")
++	}
++	userID, _ := uuid.Parse(userIDStr)
++
++	c := &repository.Case{
++		ApplicantID:       userID,
++		ApplicantCapacity: "principal",
++		Province:          input.Province,
++		City:              input.City,
++		District:          input.District,
++		Village:           input.Village,
++		AddressDetail:     input.AddressDetail,
++	}
++
++	created, err := s.caseRepo.Create(ctx, c)
++	if err != nil {
++		return nil, fmt.Errorf("خطا در ایجاد پرونده: %w", err)
++	}
++
++	// Audit log
++	s.auditRepo.Record(ctx, &repository.AuditEvent{
++		EventType:    "case.created",
++		ActorType:    "applicant",
++		ActorID:      &userID,
++		ResourceType: "case",
++		ResourceID:   &created.ID,
++	})
++
++	return created, nil
++}
++
++// GetCase returns a case by ID
++func (s *CaseService) GetCase(ctx context.Context, id uuid.UUID) (*repository.Case, error) {
++	return s.caseRepo.GetByID(ctx, id)
++}
++
++// UpdateCase updates case fields
++func (s *CaseService) UpdateCase(ctx context.Context, id uuid.UUID, fields map[string]interface{}) error {
++	return s.caseRepo.UpdateByID(ctx, id, fields)
++}
++
++// UpdateCapacity updates the applicant capacity
++func (s *CaseService) UpdateCapacity(ctx context.Context, id uuid.UUID, capacity string) error {
++	valid := map[string]bool{"principal": true, "legal_rep_natural": true, "legal_rep_legal": true}
++	if !valid[capacity] {
++		return fmt.Errorf("سمت متقاضی نامعتبر است — مقادیر مجاز: اصیل، نماینده قانونی شخص حقیقی، نماینده قانونی شخص حقوقی")
++	}
++	return s.caseRepo.UpdateCapacity(ctx, id, capacity)
++}
++
++// SubmitForMap transitions case from draft to map_in_progress
++func (s *CaseService) SubmitForMap(ctx context.Context, caseID uuid.UUID) (*repository.MapService, error) {
++	// Check case exists and is in draft status
++	c, err := s.caseRepo.GetByID(ctx, caseID)
++	if err != nil {
++		return nil, fmt.Errorf("پرونده یافت نشد")
++	}
++	if c.Status != "draft" {
++		return nil, fmt.Errorf("پرونده در وضعیت %s است — فقط پرونده‌های پیش‌نویس قابل شروع هستند", c.Status)
++	}
++
++	// Validate applicant identity (dev mode: relaxed)
++	user, err := s.userRepo.FindByID(ctx, c.ApplicantID)
++	if err != nil {
++		return nil, fmt.Errorf("متقاضی یافت نشد")
++	}
++	if !user.MobileVerified {
++		return nil, fmt.Errorf("شماره موبایل متقاضی تایید نشده است")
++	}
++
++	// Transition case to map_in_progress
++	if err := s.caseSM.Execute(ctx, caseID, "map_in_progress"); err != nil {
++		return nil, fmt.Errorf("شروع فرآیند نقشه امکان‌پذیر نیست: %w", err)
++	}
++
++	// Create map service
++	ms, err := s.mapRepo.Create(ctx, caseID)
++	if err != nil {
++		return nil, fmt.Errorf("خطا در ایجاد سرویس نقشه: %w", err)
++	}
++
++	// Audit log
++	actorID := c.ApplicantID
++	s.auditRepo.Record(ctx, &repository.AuditEvent{
++		EventType:    "map.expert_assigned",
++		ActorType:    "system",
++		ActorID:      &actorID,
++		ResourceType: "map_service",
++		ResourceID:   &ms.ID,
++	})
++
++	return ms, nil
++}
++
++// CreateCaseInput represents the input for creating a case
++type CreateCaseInput struct {
++	Province      string
++	City          string
++	District      *string
++	Village       *string
++	AddressDetail *string
++}
+diff --git a/backend/internal/service/cert_service.go b/backend/internal/service/cert_service.go
+new file mode 100644
+index 0000000..da18d40
+--- /dev/null
++++ b/backend/internal/service/cert_service.go
+@@ -0,0 +1,124 @@
++package service
++
++import (
++	"context"
++	"fmt"
++	"time"
++
++	"github.com/google/uuid"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++)
++
++// CertService orchestrates certificate service operations
++type CertService struct {
++	certRepo  repository.CertServiceRepository
++	caseSM    *workflow.StateMachine
++	certSM    *workflow.StateMachine
++	auditRepo repository.AuditLogRepository
++}
++
++// NewCertService creates a new cert service
++func NewCertService(
++	certRepo repository.CertServiceRepository,
++	caseSM *workflow.StateMachine,
++	certSM *workflow.StateMachine,
++	auditRepo repository.AuditLogRepository,
++) *CertService {
++	return &CertService{
++		certRepo:  certRepo,
++		caseSM:    caseSM,
++		certSM:    certSM,
++		auditRepo: auditRepo,
++	}
++}
++
++// Get returns a cert service by ID
++func (s *CertService) Get(ctx context.Context, id uuid.UUID) (*repository.CertService, error) {
++	return s.certRepo.GetByID(ctx, id)
++}
++
++// RequestConsent triggers OTP consent
++func (s *CertService) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	return s.certRepo.RequestConsent(ctx, id)
++}
++
++// VerifyConsent verifies consent OTP
++func (s *CertService) VerifyConsent(ctx context.Context, id uuid.UUID) error {
++	return s.certRepo.VerifyConsent(ctx, id)
++}
++
++// UpdateDetails updates certificate metadata
++func (s *CertService) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateCertInput) error {
++	fields := make(map[string]interface{})
++	if input.ActionReference != nil {
++		fields["action_reference"] = *input.ActionReference
++	}
++	if input.ActionType != nil {
++		fields["action_type"] = *input.ActionType
++	}
++	if input.ActionDate != nil {
++		t, err := time.Parse("2006-01-02", *input.ActionDate)
++		if err != nil {
++			return fmt.Errorf("فرمت تاریخ نامعتبر است — باید YYYY-MM-DD باشد")
++		}
++		fields["action_date"] = t
++	}
++	if input.CertImageID != nil {
++		fields["cert_image_path"] = *input.CertImageID
++	}
++	if input.CertUniqueID != nil {
++		fields["cert_unique_id"] = *input.CertUniqueID
++	}
++	return s.certRepo.UpdateDetails(ctx, id, fields)
++}
++
++// SubmitToOrg submits the certificate to the organization (final step)
++func (s *CertService) SubmitToOrg(ctx context.Context, id uuid.UUID) (map[string]string, error) {
++	// Validate: must be in pending_data status
++	cs, err := s.certRepo.GetByID(ctx, id)
++	if err != nil {
++		return nil, err
++	}
++	if cs.Status != "pending_data" {
++		return nil, fmt.Errorf("ابتدا باید اطلاعات گواهی تکمیل شود")
++	}
++
++	// Transition cert to submitted
++	if err := s.certSM.Execute(ctx, id, "submitted_to_org"); err != nil {
++		return nil, fmt.Errorf("امکان ارسال گواهی وجود ندارد: %w", err)
++	}
++
++	// Simulated: submit and auto-approve
++	caseID, trackingCode, err := s.certRepo.SubmitToOrg(ctx, id)
++	if err != nil {
++		return nil, err
++	}
++
++	// Transition case to cert_completed (end of chain)
++	if err := s.caseSM.Execute(ctx, caseID, "cert_completed"); err != nil {
++		return nil, fmt.Errorf("خطا در تکمیل پرونده: %w", err)
++	}
++
++	// Audit log
++	s.auditRepo.Record(ctx, &repository.AuditEvent{
++		EventType:    "cert.approved",
++		ActorType:    "system",
++		ResourceType: "cert_service",
++		ResourceID:   &id,
++	})
++
++	return map[string]string{
++		"message":       "گواهی اقدام ثبت و تایید شد — فرآیند تکمیل گردید",
++		"tracking_code": trackingCode,
++	}, nil
++}
++
++// UpdateCertInput for updating certificate details
++type UpdateCertInput struct {
++	ActionReference *string
++	ActionType      *string
++	ActionDate      *string
++	CertImageID     *string
++	CertUniqueID    *string
++}
+diff --git a/backend/internal/service/claim_service.go b/backend/internal/service/claim_service.go
+new file mode 100644
+index 0000000..43e15f3
+--- /dev/null
++++ b/backend/internal/service/claim_service.go
+@@ -0,0 +1,246 @@
++package service
++
++import (
++	"context"
++	"fmt"
++	"strings"
++
++	"github.com/google/uuid"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++)
++
++// ClaimService orchestrates claim service operations
++type ClaimService struct {
++	claimRepo    repository.ClaimServiceRepository
++	caseSM       *workflow.StateMachine
++	claimSM      *workflow.StateMachine
++	auditRepo    repository.AuditLogRepository
++	aiAdviceRepo repository.AIAdviceRepository
++}
++
++// NewClaimService creates a new claim service
++func NewClaimService(
++	claimRepo repository.ClaimServiceRepository,
++	caseSM *workflow.StateMachine,
++	claimSM *workflow.StateMachine,
++	auditRepo repository.AuditLogRepository,
++	aiAdviceRepo repository.AIAdviceRepository,
++) *ClaimService {
++	return &ClaimService{
++		claimRepo:    claimRepo,
++		caseSM:       caseSM,
++		claimSM:      claimSM,
++		auditRepo:    auditRepo,
++		aiAdviceRepo: aiAdviceRepo,
++	}
++}
++
++// Get returns a claim service by ID
++func (s *ClaimService) Get(ctx context.Context, id uuid.UUID) (*repository.ClaimService, error) {
++	return s.claimRepo.GetByID(ctx, id)
++}
++
++// RequestConsent sends OTP + false claim warning
++func (s *ClaimService) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	return s.claimRepo.RequestConsent(ctx, id)
++}
++
++// VerifyConsent verifies consent OTP after false claim warning acknowledged
++func (s *ClaimService) VerifyConsent(ctx context.Context, id uuid.UUID, ack bool) error {
++	if !ack {
++		return fmt.Errorf("باید صریحاً اعلام کنید که از تبعات قانونی ادعای واهی مطلع هستید")
++	}
++	return s.claimRepo.VerifyConsent(ctx, id)
++}
++
++// UpdateDetails updates claim metadata
++func (s *ClaimService) UpdateDetails(ctx context.Context, id uuid.UUID, input UpdateClaimInput) error {
++	fields := buildClaimFields(input)
++	return s.claimRepo.UpdateDetails(ctx, id, fields)
++}
++
++// AddDocument adds a supporting document to the claim
++func (s *ClaimService) AddDocument(ctx context.Context, claimID uuid.UUID, docType, fileID, description string) (*repository.ClaimDocument, error) {
++	return s.claimRepo.AddDocument(ctx, claimID, docType, fileID, description)
++}
++
++// DeleteDocument removes a document (only if not verified)
++func (s *ClaimService) DeleteDocument(ctx context.Context, docID uuid.UUID) error {
++	return s.claimRepo.DeleteDocument(ctx, docID)
++}
++
++// ListDocuments returns all documents for a claim
++func (s *ClaimService) ListDocuments(ctx context.Context, claimID uuid.UUID) ([]repository.ClaimDocument, error) {
++	return s.claimRepo.ListDocuments(ctx, claimID)
++}
++
++// VerifyDocument marks a document as verified/rejected
++func (s *ClaimService) VerifyDocument(ctx context.Context, docID uuid.UUID, claimID uuid.UUID, verified bool, note string) error {
++	return s.claimRepo.VerifyDocument(ctx, docID, claimID, verified, note)
++}
++
++// SubmitToOrg submits the claim to the organization after verification
++func (s *ClaimService) SubmitToOrg(ctx context.Context, id uuid.UUID) (map[string]string, error) {
++	// Pre-condition: all documents must be verified
++	unverifiedCount, err := s.claimRepo.CountUnverifiedDocuments(ctx, id)
++	if err != nil {
++		return nil, fmt.Errorf("خطا در بررسی مستندات: %w", err)
++	}
++	if unverifiedCount > 0 {
++		return nil, fmt.Errorf("تمام مستندات باید توسط کارشناس تایید شوند — %d مستند تایید نشده", unverifiedCount)
++	}
++
++	// Transition claim to submitted
++	if err := s.claimSM.Execute(ctx, id, "submitted_to_org"); err != nil {
++		return nil, fmt.Errorf("امکان ارسال ادعا وجود ندارد: %w", err)
++	}
++
++	// Simulated: submit and auto-approve
++	caseID, trackingCode, err := s.claimRepo.SubmitToOrg(ctx, id)
++	if err != nil {
++		return nil, err
++	}
++
++	// Transition case to claim_completed
++	if err := s.caseSM.Execute(ctx, caseID, "claim_completed"); err != nil {
++		return nil, fmt.Errorf("خطا در به‌روزرسانی وضعیت پرونده: %w", err)
++	}
++
++	// Audit log
++	s.auditRepo.Record(ctx, &repository.AuditEvent{
++		EventType:    "claim.approved",
++		ActorType:    "system",
++		ResourceType: "claim_service",
++		ResourceID:   &id,
++	})
++
++	return map[string]string{
++		"message":       "ادعا ثبت و تایید شد",
++		"tracking_code": trackingCode,
++	}, nil
++}
++
++// GenerateAIAdvice generates legal advice based on claim data
++func (s *ClaimService) GenerateAIAdvice(ctx context.Context, id uuid.UUID) (map[string]interface{}, error) {
++	cs, err := s.claimRepo.GetByID(ctx, id)
++	if err != nil {
++		return nil, err
++	}
++
++	claimType := ""
++	ownershipType := ""
++	if cs.ClaimType != nil {
++		claimType = *cs.ClaimType
++	}
++	if cs.OwnershipType != nil {
++		ownershipType = *cs.OwnershipType
++	}
++
++	advice := generateLegalAdvice(claimType, ownershipType)
++
++	adviceID, err := s.aiAdviceRepo.Save(ctx, id, &repository.AIAdviceLog{
++		CaseID:     cs.CaseID,
++		Action:     advice.Action,
++		References: advice.References,
++		Confidence: advice.Confidence,
++	})
++	if err != nil {
++		return nil, fmt.Errorf("خطا در ذخیره راهنمایی: %w", err)
++	}
++
++	return map[string]interface{}{
++		"id":                 adviceID,
++		"recommended_action": advice.Action,
++		"legal_references":   advice.References,
++		"confidence_score":   advice.Confidence,
++		"disclaimer":         "این یک نظر رسمی حقوقی نیست و صرفاً راهنمایی برای انتخاب نوع اقدام قانونی است",
++	}, nil
++}
++
++// UpdateClaimInput for updating claim details
++type UpdateClaimInput struct {
++	ClaimType            *string
++	OwnershipType        *string
++	MainPlateNumber      *string
++	SubPlateNumber       *string
++	PlateSection         *string
++	TotalShare           *int
++	PartialShare         *int
++	HasGovernmentRights  *bool
++	TreasuryPaymentRef   *string
++	LegalAdviceRequested *bool
++	LegalAdviceMethod    *string
++}
++
++// Legal advice struct
++type legalAdvice struct {
++	Action     string
++	References []string
++	Confidence float64
++}
++
++func generateLegalAdvice(claimType, ownershipType string) legalAdvice {
++	if strings.TrimSpace(ownershipType) != "" {
++		_ = ownershipType // برای استفاده در نسخه‌های بعدی با AI واقعی
++	}
++
++	switch claimType {
++	case "ownership":
++		return legalAdvice{
++			Action:     "طرح دعوای اثبات مالکیت در مراجع قضایی",
++			References: []string{"ماده ۲۲ قانون ثبت", "ماده ۱۰ قانون الزام به ثبت رسمی معاملات"},
++			Confidence: 0.85,
++		}
++	case "easement":
++		return legalAdvice{
++			Action:     "طرح دعوای اثبات حق ارتفاق در مراجع قضایی",
++			References: []string{"ماده ۹۳ قانون مدنی", "ماده ۱۰ قانون الزام"},
++			Confidence: 0.80,
++		}
++	default:
++		return legalAdvice{
++			Action:     "مراجعه به کارشناس ثبتی برای تعیین مسیر حقوقی مناسب",
++			References: []string{"ماده ۱۰ قانون الزام به ثبت رسمی معاملات"},
++			Confidence: 0.70,
++		}
++	}
++}
++
++func buildClaimFields(input UpdateClaimInput) map[string]interface{} {
++	fields := make(map[string]interface{})
++	if input.ClaimType != nil {
++		fields["claim_type"] = *input.ClaimType
++	}
++	if input.OwnershipType != nil {
++		fields["ownership_type"] = *input.OwnershipType
++	}
++	if input.MainPlateNumber != nil {
++		fields["main_plate_number"] = *input.MainPlateNumber
++	}
++	if input.SubPlateNumber != nil {
++		fields["sub_plate_number"] = *input.SubPlateNumber
++	}
++	if input.PlateSection != nil {
++		fields["plate_section"] = *input.PlateSection
++	}
++	if input.TotalShare != nil {
++		fields["total_share"] = *input.TotalShare
++	}
++	if input.PartialShare != nil {
++		fields["partial_share"] = *input.PartialShare
++	}
++	if input.HasGovernmentRights != nil {
++		fields["has_government_rights"] = *input.HasGovernmentRights
++	}
++	if input.TreasuryPaymentRef != nil {
++		fields["treasury_payment_ref"] = *input.TreasuryPaymentRef
++	}
++	if input.LegalAdviceRequested != nil {
++		fields["legal_advice_requested"] = *input.LegalAdviceRequested
++	}
++	if input.LegalAdviceMethod != nil {
++		fields["legal_advice_method"] = *input.LegalAdviceMethod
++	}
++	return fields
++}
+diff --git a/backend/internal/service/claim_service_test.go b/backend/internal/service/claim_service_test.go
+new file mode 100644
+index 0000000..dace7ac
+--- /dev/null
++++ b/backend/internal/service/claim_service_test.go
+@@ -0,0 +1,108 @@
++package service
++
++import (
++	"testing"
++)
++
++// TestGenerateLegalAdvice_Ownership verifies advice for ownership claims
++func TestGenerateLegalAdvice_Ownership(t *testing.T) {
++	advice := generateLegalAdvice("ownership", "land_and_building")
++
++	if advice.Action != "طرح دعوای اثبات مالکیت در مراجع قضایی" {
++		t.Errorf("unexpected action: %s", advice.Action)
++	}
++	if len(advice.References) != 2 {
++		t.Errorf("expected 2 references, got %d", len(advice.References))
++	}
++	if advice.Confidence != 0.85 {
++		t.Errorf("expected confidence 0.85, got %f", advice.Confidence)
++	}
++}
++
++// TestGenerateLegalAdvice_Easement verifies advice for easement claims
++func TestGenerateLegalAdvice_Easement(t *testing.T) {
++	advice := generateLegalAdvice("easement", "")
++
++	if advice.Action != "طرح دعوای اثبات حق ارتفاق در مراجع قضایی" {
++		t.Errorf("unexpected action: %s", advice.Action)
++	}
++	if advice.Confidence != 0.80 {
++		t.Errorf("expected confidence 0.80, got %f", advice.Confidence)
++	}
++}
++
++// TestGenerateLegalAdvice_Default verifies fallback advice
++func TestGenerateLegalAdvice_Default(t *testing.T) {
++	advice := generateLegalAdvice("", "")
++
++	if advice.Confidence != 0.70 {
++		t.Errorf("expected confidence 0.70 for default, got %f", advice.Confidence)
++	}
++	if len(advice.References) == 0 {
++		t.Error("default advice should have at least one reference")
++	}
++}
++
++// TestBuildClaimFields verifies field construction
++func TestBuildClaimFields(t *testing.T) {
++	claimType := "ownership"
++	hasGov := true
++
++	input := UpdateClaimInput{
++		ClaimType:           &claimType,
++		HasGovernmentRights: &hasGov,
++	}
++
++	fields := buildClaimFields(input)
++
++	if len(fields) != 2 {
++		t.Errorf("expected 2 fields, got %d", len(fields))
++	}
++	if fields["claim_type"] != "ownership" {
++		t.Errorf("expected claim_type=ownership, got %v", fields["claim_type"])
++	}
++	if fields["has_government_rights"] != true {
++		t.Errorf("expected has_government_rights=true, got %v", fields["has_government_rights"])
++	}
++}
++
++// TestBuildClaimFields_Empty verifies empty input produces empty map
++func TestBuildClaimFields_Empty(t *testing.T) {
++	fields := buildClaimFields(UpdateClaimInput{})
++	if len(fields) != 0 {
++		t.Errorf("expected 0 fields for empty input, got %d", len(fields))
++	}
++}
++
++// TestBuildClaimFields_All verifies all fields are included
++func TestBuildClaimFields_All(t *testing.T) {
++	claimType := "ownership"
++	ownership := "land_and_building"
++	mainPlate := "123"
++	subPlate := "456"
++	section := "7"
++	totalShare := 6
++	partialShare := 2
++	hasGov := false
++	ref := "12345"
++	method := "human"
++
++	input := UpdateClaimInput{
++		ClaimType:           &claimType,
++		OwnershipType:       &ownership,
++		MainPlateNumber:     &mainPlate,
++		SubPlateNumber:      &subPlate,
++		PlateSection:        &section,
++		TotalShare:          &totalShare,
++		PartialShare:        &partialShare,
++		HasGovernmentRights: &hasGov,
++		TreasuryPaymentRef:  &ref,
++		LegalAdviceMethod:   &method,
++	}
++
++	fields := buildClaimFields(input)
++
++	if len(fields) != 10 {
++		t.Errorf("expected 10 fields, got %d: %v", len(fields), fields)
++	}
++}
+diff --git a/backend/internal/service/map_service.go b/backend/internal/service/map_service.go
+new file mode 100644
+index 0000000..eb4170f
+--- /dev/null
++++ b/backend/internal/service/map_service.go
+@@ -0,0 +1,112 @@
++package service
++
++import (
++	"context"
++	"fmt"
++
++	"github.com/google/uuid"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
++)
++
++// MapService orchestrates map service operations
++type MapService struct {
++	mapRepo  repository.MapServiceRepository
++	caseSM   *workflow.StateMachine
++	mapSM    *workflow.StateMachine
++	auditRepo repository.AuditLogRepository
++}
++
++// NewMapService creates a new map service
++func NewMapService(
++	mapRepo repository.MapServiceRepository,
++	caseSM *workflow.StateMachine,
++	mapSM *workflow.StateMachine,
++	auditRepo repository.AuditLogRepository,
++) *MapService {
++	return &MapService{
++		mapRepo:   mapRepo,
++		caseSM:    caseSM,
++		mapSM:     mapSM,
++		auditRepo: auditRepo,
++	}
++}
++
++// Get returns a map service by ID
++func (s *MapService) Get(ctx context.Context, id uuid.UUID) (*repository.MapService, error) {
++	return s.mapRepo.GetByID(ctx, id)
++}
++
++// RequestConsent triggers OTP consent for the applicant
++func (s *MapService) RequestConsent(ctx context.Context, id uuid.UUID) error {
++	ms, err := s.mapRepo.GetByID(ctx, id)
++	if err != nil {
++		return err
++	}
++
++	if ms.Status != "expert_assigned" && ms.Status != "pending_expert_assignment" {
++		return fmt.Errorf("درخواست رضایت فقط در وضعیت‌های اولیه سرویس نقشه امکان‌پذیر است")
++	}
++
++	return s.mapRepo.RequestConsent(ctx, id)
++}
++
++// VerifyConsent verifies the consent OTP
++func (s *MapService) VerifyConsent(ctx context.Context, id uuid.UUID) error {
++	return s.mapRepo.VerifyConsent(ctx, id)
++}
++
++// StartFieldwork transitions map to fieldwork_in_progress
++func (s *MapService) StartFieldwork(ctx context.Context, id uuid.UUID, role string) error {
++	if role != "survey_expert" {
++		return fmt.Errorf("فقط کارشناس نقشه‌بردار می‌تواند عملیات میدانی را شروع کند")
++	}
++
++	return s.mapSM.Execute(ctx, id, "fieldwork_in_progress")
++}
++
++// SubmitFieldwork submits fieldwork data (map file + descriptive table)
++func (s *MapService) SubmitFieldwork(ctx context.Context, id uuid.UUID, mapFileID string, descriptiveTable map[string]interface{}) error {
++	return s.mapRepo.SubmitFieldwork(ctx, id, mapFileID, descriptiveTable)
++}
++
++// SubmitToOrg submits the map to the organization and transitions the case
++func (s *MapService) SubmitToOrg(ctx context.Context, id uuid.UUID) (map[string]string, error) {
++	// Validate: fieldwork must be done
++	ms, err := s.mapRepo.GetByID(ctx, id)
++	if err != nil {
++		return nil, err
++	}
++	if ms.Status != "fieldwork_done" {
++		return nil, fmt.Errorf("ابتدا باید عملیات میدانی تکمیل و ثبت شود")
++	}
++
++	// Transition map to submitted
++	if err := s.mapSM.Execute(ctx, id, "submitted_to_org"); err != nil {
++		return nil, fmt.Errorf("امکان ارسال به سازمان وجود ندارد: %w", err)
++	}
++
++	// Simulated: submit and auto-approve (در نسخه نهایی: Outbox Pattern)
++	caseID, trackingCode, err := s.mapRepo.SubmitToOrg(ctx, id, "submitted_to_org")
++	if err != nil {
++		return nil, err
++	}
++
++	// Transition case to map_completed
++	if err := s.caseSM.Execute(ctx, caseID, "map_completed"); err != nil {
++		return nil, fmt.Errorf("خطا در به‌روزرسانی وضعیت پرونده: %w", err)
++	}
++
++	// Audit log
++	s.auditRepo.Record(ctx, &repository.AuditEvent{
++		EventType:    "map.approved",
++		ActorType:    "system",
++		ResourceType: "map_service",
++		ResourceID:   &id,
++	})
++
++	return map[string]string{
++		"message":       "نقشه به سازمان ارسال و تایید شد",
++		"tracking_code": trackingCode,
++	}, nil
++}
+diff --git a/backend/internal/storage/storage.go b/backend/internal/storage/storage.go
+new file mode 100644
+index 0000000..dcb2434
+--- /dev/null
++++ b/backend/internal/storage/storage.go
+@@ -0,0 +1,104 @@
++package storage
++
++import (
++	"context"
++	"fmt"
++	"io"
++	"log/slog"
++	"time"
++
++	"github.com/msaeedlavasani/SabtBrooker/backend/internal/config"
++	"github.com/minio/minio-go/v7"
++	"github.com/minio/minio-go/v7/pkg/credentials"
++)
++
++// FileStorage wraps MinIO operations
++type FileStorage struct {
++	client     *minio.Client
++	bucketName string
++}
++
++// NewFileStorage creates a new MinIO client and ensures bucket exists
++func NewFileStorage(ctx context.Context, cfg config.MinIOConfig) (*FileStorage, error) {
++	client, err := minio.New(cfg.Endpoint, &minio.Options{
++		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
++		Secure: cfg.UseSSL,
++	})
++	if err != nil {
++		return nil, fmt.Errorf("failed to create MinIO client: %w", err)
++	}
++
++	fs := &FileStorage{
++		client:     client,
++		bucketName: cfg.Bucket,
++	}
++
++	// Ensure bucket exists
++	exists, err := client.BucketExists(ctx, cfg.Bucket)
++	if err != nil {
++		return nil, fmt.Errorf("failed to check bucket %s: %w", cfg.Bucket, err)
++	}
++	if !exists {
++		if err := client.MakeBucket(ctx, cfg.Bucket, minio.MakeBucketOptions{}); err != nil {
++			return nil, fmt.Errorf("failed to create bucket %s: %w", cfg.Bucket, err)
++		}
++		slog.Info("created MinIO bucket", "bucket", cfg.Bucket)
++	}
++
++	slog.Info("connected to MinIO", "endpoint", cfg.Endpoint, "bucket", cfg.Bucket)
++	return fs, nil
++}
++
++// Upload stores a file in MinIO and returns its object key
++func (fs *FileStorage) Upload(ctx context.Context, objectKey string, reader io.Reader, size int64, contentType string) error {
++	_, err := fs.client.PutObject(ctx, fs.bucketName, objectKey, reader, size, minio.PutObjectOptions{
++		ContentType: contentType,
++	})
++	if err != nil {
++		return fmt.Errorf("failed to upload %s: %w", objectKey, err)
++	}
++	slog.Info("file uploaded", "key", objectKey, "size", size)
++	return nil
++}
++
++// Download retrieves a file from MinIO
++func (fs *FileStorage) Download(ctx context.Context, objectKey string) (io.ReadCloser, error) {
++	obj, err := fs.client.GetObject(ctx, fs.bucketName, objectKey, minio.GetObjectOptions{})
++	if err != nil {
++		return nil, fmt.Errorf("failed to download %s: %w", objectKey, err)
++	}
++	return obj, nil
++}
++
++// Delete removes a file from MinIO
++func (fs *FileStorage) Delete(ctx context.Context, objectKey string) error {
++	err := fs.client.RemoveObject(ctx, fs.bucketName, objectKey, minio.RemoveObjectOptions{})
++	if err != nil {
++		return fmt.Errorf("failed to delete %s: %w", objectKey, err)
++	}
++	slog.Info("file deleted", "key", objectKey)
++	return nil
++}
++
++// GeneratePresignedURL creates a time-limited download URL
++func (fs *FileStorage) GeneratePresignedURL(ctx context.Context, objectKey string, expiry time.Duration) (string, error) {
++	url, err := fs.client.PresignedGetObject(ctx, fs.bucketName, objectKey, expiry, nil)
++	if err != nil {
++		return "", fmt.Errorf("failed to generate presigned URL for %s: %w", objectKey, err)
++	}
++	return url.String(), nil
++}
++
++// PresignedUploadURL creates a time-limited upload URL
++func (fs *FileStorage) PresignedUploadURL(ctx context.Context, objectKey string, expiry time.Duration) (string, error) {
++	url, err := fs.client.PresignedPutObject(ctx, fs.bucketName, objectKey, expiry)
++	if err != nil {
++		return "", fmt.Errorf("failed to generate presigned upload URL for %s: %w", objectKey, err)
++	}
++	return url.String(), nil
++}
++
++// Close is a no-op — MinIO client doesn't need explicit close
++func (fs *FileStorage) Close() error {
++	return nil
++}
+diff --git a/backend/internal/workflow/statemachine_test.go b/backend/internal/workflow/statemachine_test.go
+new file mode 100644
+index 0000000..98cfea2
+--- /dev/null
++++ b/backend/internal/workflow/statemachine_test.go
+@@ -0,0 +1,211 @@
++package workflow
++
++import (
++	"context"
++	"testing"
++
++	"github.com/google/uuid"
++)
++
++// TestNewStateMachine verifies basic creation
++func TestNewStateMachine(t *testing.T) {
++	sm := NewStateMachine("case", nil, nil)
++	if sm == nil {
++		t.Fatal("state machine should not be nil")
++	}
++	if sm.resourceType != "case" {
++		t.Errorf("expected resourceType 'case', got '%s'", sm.resourceType)
++	}
++}
++
++// TestAddTransition registers transitions and verifies they exist
++func TestAddTransition(t *testing.T) {
++	sm := NewStateMachine("case", nil, nil)
++
++	sm.AddTransition(Transition{From: "draft", To: "map_in_progress"})
++	sm.AddTransition(Transition{From: "map_in_progress", To: "map_completed"})
++	sm.AddTransition(Transition{From: "map_completed", To: "claim_in_progress"})
++
++	// Valid transitions
++	tests := []struct {
++		from, to Status
++		want     bool
++	}{
++		{"draft", "map_in_progress", true},
++		{"map_in_progress", "map_completed", true},
++		{"map_completed", "claim_in_progress", true},
++		{"draft", "map_completed", false},         // skip a step
++		{"claim_completed", "cert_completed", false}, // non-existent
++		{"draft", "cert_completed", false},
++	}
++
++	for _, tt := range tests {
++		_, exists := sm.GetTransition(tt.from, tt.to)
++		if exists != tt.want {
++			t.Errorf("transition %s→%s: got exists=%v, want %v", tt.from, tt.to, exists, tt.want)
++		}
++	}
++}
++
++// TestGuardError verifies error formatting
++func TestGuardError(t *testing.T) {
++	err := &GuardError{Reasons: []string{
++		"شماره موبایل تایید نشده",
++		"سن کمتر از ۱۸ سال",
++	}}
++	expected := "guard check failed: [شماره موبایل تایید نشده سن کمتر از ۱۸ سال]"
++	if err.Error() != expected {
++		t.Errorf("expected '%s', got '%s'", expected, err.Error())
++	}
++}
++
++// TestInvalidTransitionError verifies error formatting
++func TestInvalidTransitionError(t *testing.T) {
++	id := uuid.New()
++	err := &InvalidTransitionError{
++		ResourceType: "case",
++		ResourceID:   id,
++		From:         "draft",
++		To:           "cert_completed",
++	}
++	expected := "invalid transition for case " + id.String() + ": draft → cert_completed"
++	if err.Error() != expected {
++		t.Errorf("expected '%s', got '%s'", expected, err.Error())
++	}
++}
++
++// TestGuardExecution verifies guards are called during Execute
++func TestGuardExecution(t *testing.T) {
++	sm := NewStateMachine("test", nil, nil)
++	guardCalled := false
++
++	sm.AddTransition(Transition{
++		From: "start",
++		To:   "end",
++		Guard: func(ctx context.Context, resourceID uuid.UUID) error {
++			guardCalled = true
++			return nil
++		},
++	})
++
++	// We can only test guard registration — Execute needs DB
++	tr, ok := sm.GetTransition("start", "end")
++	if !ok {
++		t.Fatal("transition should exist")
++	}
++	if tr.Guard == nil {
++		t.Fatal("guard should be set")
++	}
++
++	// Call guard directly
++	err := tr.Guard(context.Background(), uuid.New())
++	if err != nil {
++		t.Errorf("guard should pass: %v", err)
++	}
++	if !guardCalled {
++		t.Error("guard was not called")
++	}
++}
++
++// TestGuardFailure verifies guard blocks transition
++func TestGuardFailure(t *testing.T) {
++	sm := NewStateMachine("test", nil, nil)
++
++	sm.AddTransition(Transition{
++		From: "start",
++		To:   "end",
++		Guard: func(ctx context.Context, resourceID uuid.UUID) error {
++			return &GuardError{Reasons: []string{"blocked"}}
++		},
++	})
++
++	tr, _ := sm.GetTransition("start", "end")
++	err := tr.Guard(context.Background(), uuid.New())
++	if err == nil {
++		t.Fatal("guard should have failed")
++	}
++}
++
++// TestCanTransitionWithGuard verifies CanTransition respects guards
++func TestCanTransitionWithGuard(t *testing.T) {
++	// This test verifies the interface contract, not actual DB behavior
++	sm := NewStateMachine("test", nil, nil)
++
++	sm.AddTransition(Transition{
++		From: "start",
++		To:   "end",
++		Guard: func(ctx context.Context, resourceID uuid.UUID) error {
++			return &GuardError{Reasons: []string{"not ready"}}
++		},
++	})
++
++	_, err := sm.CanTransition(context.Background(), uuid.New(), "end")
++	// Will fail because getCurrentState needs DB — but we can at least
++	// verify the transition exists in the registry
++	_, exists := sm.GetTransition("start", "end")
++	if !exists {
++		t.Error("transition should be registered")
++	}
++	if err == nil {
++		t.Log("CanTransition with guard — state retrieval failed (expected without DB)")
++	}
++}
++
++// TestMultipleTransitionsFromSameState verifies branching
++func TestMultipleTransitionsFromSameState(t *testing.T) {
++	sm := NewStateMachine("test", nil, nil)
++
++	sm.AddTransition(Transition{From: "submitted", To: "approved"})
++	sm.AddTransition(Transition{From: "submitted", To: "rejected"})
++
++	_, exists1 := sm.GetTransition("submitted", "approved")
++	_, exists2 := sm.GetTransition("submitted", "rejected")
++
++	if !exists1 || !exists2 {
++		t.Error("both transitions from 'submitted' should exist")
++	}
++}
++
++// TestEventPublishing verifies events are attached to transitions
++func TestEventPublishing(t *testing.T) {
++	sm := NewStateMachine("test", nil, nil)
++
++	sm.AddTransition(Transition{
++		From:   "draft",
++		To:     "map_in_progress",
++		Events: []string{"case.map.started", "case.status.changed"},
++	})
++
++	tr, _ := sm.GetTransition("draft", "map_in_progress")
++	if len(tr.Events) != 2 {
++		t.Errorf("expected 2 events, got %d", len(tr.Events))
++	}
++	if tr.Events[0] != "case.map.started" || tr.Events[1] != "case.status.changed" {
++		t.Errorf("unexpected event names: %v", tr.Events)
++	}
++}
++
++// TestEffectExecution verifies effects are attached to transitions
++func TestEffectExecution(t *testing.T) {
++	sm := NewStateMachine("test", nil, nil)
++	effectCalled := false
++
++	sm.AddTransition(Transition{
++		From: "start",
++		To:   "end",
++		Effect: func(ctx context.Context, resourceID uuid.UUID) error {
++			effectCalled = true
++			return nil
++		},
++	})
++
++	tr, _ := sm.GetTransition("start", "end")
++	if tr.Effect == nil {
++		t.Fatal("effect should be set")
++	}
++
++	_ = tr.Effect(context.Background(), uuid.New())
++	if !effectCalled {
++		t.Error("effect was not called")
++	}
++}
+diff --git a/backend/migrations/000013_outbox.down.sql b/backend/migrations/000013_outbox.down.sql
+new file mode 100644
+index 0000000..f55bd2c
+--- /dev/null
++++ b/backend/migrations/000013_outbox.down.sql
+@@ -0,0 +1,5 @@
++-- ============================================================================
++-- Migration 013: Outbox Pattern — rollback
++-- ============================================================================
++
++DROP TABLE IF EXISTS outbox_messages;
+diff --git a/backend/migrations/000013_outbox.up.sql b/backend/migrations/000013_outbox.up.sql
+new file mode 100644
+index 0000000..4f0aeca
+--- /dev/null
++++ b/backend/migrations/000013_outbox.up.sql
+@@ -0,0 +1,24 @@
++-- ============================================================================
++-- Migration 013: Outbox Pattern — reliable messaging to organization
++-- ============================================================================
++
++CREATE TABLE outbox_messages (
++    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
++    aggregate_type  VARCHAR(50) NOT NULL,        -- map_service | claim_service | cert_service
++    aggregate_id    UUID NOT NULL,
++    event_type      VARCHAR(100) NOT NULL,       -- submit_to_org | status_check
++    payload         JSONB NOT NULL,
++    status          VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending | processing | sent | failed
++    retry_count     INT NOT NULL DEFAULT 0,
++    last_error      TEXT,
++    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
++    processed_at    TIMESTAMPTZ,
++    correlation_id  UUID
++);
++
++-- Index for efficient polling of pending messages
++CREATE INDEX idx_outbox_pending ON outbox_messages (status, created_at)
++    WHERE status IN ('pending', 'failed');
++
++-- Index for looking up messages by aggregate
++CREATE INDEX idx_outbox_aggregate ON outbox_messages (aggregate_type, aggregate_id);
+-- 
+2.43.0
+

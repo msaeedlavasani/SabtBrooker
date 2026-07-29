@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/nats-io/nats.go"
 	"github.com/redis/go-redis/v9"
@@ -19,6 +18,11 @@ import (
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/database"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/handler"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/middleware"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/notification"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/outbox"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/repository"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/scheduler"
+	"github.com/msaeedlavasani/SabtBrooker/backend/internal/service"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/workflow"
 )
 
@@ -34,7 +38,8 @@ func main() {
 
 	ctx := context.Background()
 
-	// Database
+	// ── Infrastructure ──────────────────────────────────────────
+
 	db, err := database.NewPostgres(ctx, cfg.DB)
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
@@ -42,7 +47,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// Redis
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, Password: cfg.Redis.Password, DB: cfg.Redis.DB})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		slog.Error("failed to connect to Redis", "error", err)
@@ -50,7 +54,6 @@ func main() {
 	}
 	defer rdb.Close()
 
-	// NATS (non-fatal if unavailable — backend works without it)
 	nc, _ := nats.Connect(cfg.NATS.URL,
 		nats.MaxReconnects(3),
 		nats.ReconnectWait(2*time.Second),
@@ -60,23 +63,33 @@ func main() {
 		slog.Info("connected to NATS", "url", cfg.NATS.URL)
 	}
 
-	// JWT Manager
+	// ── Auth ────────────────────────────────────────────────────
+
 	jwtManager, err := auth.NewJWTManager(cfg.JWT)
 	if err != nil {
 		slog.Error("failed to initialize JWT manager", "error", err)
 		os.Exit(1)
 	}
-
-	// OTP Service
 	otpService := auth.NewOTPService(rdb, cfg.OTP)
 
-	// Workflow Engines
+	// ── Repositories ────────────────────────────────────────────
+
+	userRepo := repository.NewPostgresUserRepo(db.Pool)
+	caseRepo := repository.NewPostgresCaseRepo(db.Pool)
+	mapRepo := repository.NewPostgresMapServiceRepo(db.Pool)
+	claimRepo := repository.NewPostgresClaimServiceRepo(db.Pool)
+	certRepo := repository.NewPostgresCertServiceRepo(db.Pool)
+	auditRepo := repository.NewPostgresAuditLogRepo(db.Pool)
+	aiAdviceRepo := repository.NewPostgresAIAdviceRepo(db.Pool)
+
+	// ── Workflow Engines ────────────────────────────────────────
+
 	caseSM := workflow.BuildCaseStateMachine(db.Pool, nc)
 	mapSM := workflow.NewStateMachine("map_service", db.Pool, nc)
 	claimSM := workflow.NewStateMachine("claim_service", db.Pool, nc)
 	certSM := workflow.NewStateMachine("cert_service", db.Pool, nc)
 
-	// Map service transitions
+	// Register transitions
 	mapSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
 	mapSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "fieldwork_in_progress"})
 	mapSM.AddTransition(workflow.Transition{From: "fieldwork_in_progress", To: "fieldwork_done"})
@@ -84,25 +97,46 @@ func main() {
 	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
 	mapSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
 
-	// Claim service transitions
 	claimSM.AddTransition(workflow.Transition{From: "pending_expert_assignment", To: "expert_assigned"})
 	claimSM.AddTransition(workflow.Transition{From: "expert_assigned", To: "documents_verified"})
 	claimSM.AddTransition(workflow.Transition{From: "documents_verified", To: "submitted_to_org"})
 	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
 	claimSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
 
-	// Cert service transitions
 	certSM.AddTransition(workflow.Transition{From: "pending_data", To: "submitted_to_org"})
 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "approved"})
 	certSM.AddTransition(workflow.Transition{From: "submitted_to_org", To: "rejected"})
 
-	// Handlers
-	caseHandler := handler.NewCaseHandler(db.Pool, caseSM)
-	mapHandler := handler.NewMapHandler(db.Pool, caseSM, mapSM)
-	claimHandler := handler.NewClaimHandler(db.Pool, caseSM, claimSM)
-	certHandler := handler.NewCertHandler(db.Pool, caseSM, certSM)
+	// ── Services ────────────────────────────────────────────────
 
-	// Echo server
+	notificationSvc := notification.NewService(db.Pool, rdb)
+
+	caseSvc := service.NewCaseService(caseRepo, userRepo, mapRepo, claimRepo, certRepo, auditRepo, caseSM)
+	mapSvc := service.NewMapService(mapRepo, caseSM, mapSM, auditRepo)
+	claimSvc := service.NewClaimService(claimRepo, caseSM, claimSM, auditRepo, aiAdviceRepo)
+	certSvc := service.NewCertService(certRepo, caseSM, certSM, auditRepo)
+
+	// ── Handlers ────────────────────────────────────────────────
+
+	authHandler := handler.NewAuthHandler(jwtManager, otpService, userRepo)
+	caseHandler := handler.NewCaseHandler(caseSvc)
+	mapHandler := handler.NewMapHandler(mapSvc)
+	claimHandler := handler.NewClaimHandler(claimSvc)
+	certHandler := handler.NewCertHandler(certSvc)
+
+	// ── Background Services ─────────────────────────────────────
+
+	// Outbox publisher (submits queued messages to org)
+	outboxPublisher := outbox.NewPublisher(db.Pool, nc, 1*time.Second)
+	go outboxPublisher.Start(ctx)
+
+	// Scheduler (deadline tracking)
+	sched := scheduler.New(db.Pool, nc, 1*time.Hour)
+	schedCtx := scheduler.WithDB(ctx, db.Pool)
+	go sched.Start(schedCtx)
+
+	// ── HTTP Server ─────────────────────────────────────────────
+
 	e := echo.New()
 	e.HideBanner = true
 	e.HidePort = true
@@ -121,86 +155,21 @@ func main() {
 		return c.JSON(http.StatusOK, map[string]string{"status": "ready"})
 	})
 
-	// Public auth routes
+	// Public routes
 	v1 := e.Group("/v1")
-	authGroup := v1.Group("/auth")
-	authGroup.POST("/otp/send", func(c echo.Context) error {
-		var req struct {
-			Mobile  string `json:"mobile"`
-			Purpose string `json:"purpose"`
-		}
-		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
-		}
-		if req.Purpose == "" {
-			req.Purpose = "auth"
-		}
-		code, expiresAt, err := otpService.GenerateAndSend(c.Request().Context(), req.Mobile, req.Purpose)
-		if err != nil {
-			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
-		}
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"message":    "کد تایید ارسال شد",
-			"expires_in": int(time.Until(expiresAt).Seconds()),
-			"dev_otp":    code, // فقط در محیط توسعه — در production حذف شود
-		})
-	})
-
-	authGroup.POST("/otp/verify", func(c echo.Context) error {
-		var req struct {
-			Mobile  string `json:"mobile"`
-			OTP     string `json:"otp"`
-			Purpose string `json:"purpose"`
-		}
-		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "اطلاعات ورودی نامعتبر است"})
-		}
-		if req.Purpose == "" {
-			req.Purpose = "auth"
-		}
-		if err := otpService.Verify(c.Request().Context(), req.Mobile, req.OTP, req.Purpose); err != nil {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-		}
-
-		// Find or create user
-		var userID uuid.UUID
-		err := db.Pool.QueryRow(c.Request().Context(),
-			`INSERT INTO users (national_id, first_name, last_name, mobile, mobile_verified, role)
-			 VALUES ('TMP' || substr(md5($1), 1, 7), 'کاربر', 'سامانه', $1, true, 'applicant')
-			 ON CONFLICT (mobile) DO UPDATE SET mobile_verified = true, updated_at = NOW()
-			 RETURNING id`,
-			req.Mobile,
-		).Scan(&userID)
-		if err != nil {
-			slog.Error("failed to find/create user", "error", err)
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در ایجاد کاربر"})
-		}
-
-		tokens, err := jwtManager.GenerateTokenPair(userID, "applicant", req.Mobile)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "خطا در تولید توکن"})
-		}
-		return c.JSON(http.StatusOK, tokens)
-	})
+	authHandler.RegisterRoutes(v1.Group("/auth"))
 
 	// Protected routes
 	protected := v1.Group("")
 	protected.Use(middleware.AuthRequired(jwtManager))
 
-	protected.GET("/auth/me", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, map[string]interface{}{
-			"user_id": middleware.GetUserID(c),
-			"role":    middleware.GetUserRole(c),
-		})
-	})
-
-	// Business logic routes
 	caseHandler.RegisterRoutes(protected.Group("/cases"))
 	mapHandler.RegisterRoutes(protected.Group("/map-services"))
 	claimHandler.RegisterRoutes(protected.Group("/claim-services"))
 	certHandler.RegisterRoutes(protected.Group("/cert-services"))
 
-	// Start server
+	// ── Graceful Shutdown ───────────────────────────────────────
+
 	go func() {
 		addr := cfg.Server.Host + ":" + cfg.Server.Port
 		slog.Info("server started", "addr", addr)
@@ -210,7 +179,6 @@ func main() {
 		}
 	}()
 
-	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
