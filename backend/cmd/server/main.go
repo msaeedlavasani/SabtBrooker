@@ -48,7 +48,7 @@ func main() {
 	}
 	defer db.Close()
 
-	store, err := storage.NewMinIOStorage(cfg.MinIO)
+	store, err := storage.NewFileStorage(ctx, cfg.MinIO)
 	if err != nil {
 		slog.Error("failed to initialize storage", "error", err)
 		os.Exit(1)

@@ -12,10 +12,10 @@ import (
 )
 
 type StorageHandler struct {
-	store *storage.MinIOStorage
+	store *storage.FileStorage
 }
 
-func NewStorageHandler(store *storage.MinIOStorage) *StorageHandler {
+func NewStorageHandler(store *storage.FileStorage) *StorageHandler {
 	return &StorageHandler{store: store}
 }
 
@@ -33,7 +33,7 @@ func (h *StorageHandler) GetPresignedURL(c echo.Context) error {
 	}
 
 	// Generate PUT URL for upload (valid for 15 minutes)
-	url, err := h.store.GeneratePresignedPutURL(context.Background(), fileName, 15*time.Minute)
+	url, err := h.store.PresignedUploadURL(context.Background(), fileName, 15*time.Minute)
 	if err != nil {
 		return InternalError(c, "خطا در ایجاد لینک بارگذاری")
 	}
