@@ -66,7 +66,11 @@ func (h *MapHandler) Accept(c echo.Context) error {
 	}
 	
 	// Get expert ID from context (JWT)
-	expertID := middleware.GetUserID(c)
+	expertIDStr := middleware.GetUserID(c)
+	expertID, err := uuid.Parse(expertIDStr)
+	if err != nil {
+		return BadRequest(c, "شناسه کارشناس نامعتبر")
+	}
 	
 	if err := h.svc.AssignExpert(c.Request().Context(), id, expertID); err != nil {
 		return Unprocessable(c, err.Error(), nil)
