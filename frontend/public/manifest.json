@@ -1,0 +1,21 @@
+{
+  "name": "سامانه کارگزاری ماده ۱۰",
+  "short_name": "SabtBrooker",
+  "description": "سامانه خدمات زنجیره‌ای سازمان ثبت اسناد و املاک",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAFAF9",
+  "theme_color": "#101B33",
+  "icons": [
+    {
+      "src": "/next.svg",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/next.svg",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

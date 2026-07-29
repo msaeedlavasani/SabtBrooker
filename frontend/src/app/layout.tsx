@@ -10,6 +10,13 @@ const vazir = Vazirmatn({
 export const metadata: Metadata = {
   title: "سامانه کارگزاری ماده ۱۰",
   description: "سامانه خدمات زنجیره‌ای سازمان ثبت اسناد و املاک",
+  manifest: "/manifest.json",
+  themeColor: "#101B33",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "SabtBrooker",
+  },
 };
 
 export default function RootLayout({
