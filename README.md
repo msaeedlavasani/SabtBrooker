@@ -38,15 +38,51 @@ SabtBrooker/
 - **امنیت کامل**: محافظت در برابر حملات IDOR، SQLi، XSS و دستکاری مبالغ مالی.
 - **تراکنش‌های پایدار**: یکپارچگی کامل با درگاه زرین‌پال و سامانه پیامکی.
 
-## 🚦 دستور اجرای سریع (Production)
+## 🚀 استقرار یک‌خطی روی VPS
+
+**کل فرآیند بالا آوردن سایت، با یک دستور:**
 
 ```bash
-docker-compose up -d
-# تمام سرویس‌ها در پورت‌های کانفیگ شده بالا می‌آیند.
+curl -fsSL https://raw.githubusercontent.com/msaeedlavasani/SabtBrooker/main/deploy.sh | bash -s -- YOUR_DOMAIN.com
+```
+
+کانفیگ نهایی (درگاه پرداخت، پیامک) را در فایل `.env.production` تنظیم کنید:
+
+```bash
+cd /opt/sabtbrooker && nano .env.production
+```
+
+### پیش‌نیازهای VPS
+- **سیستم‌عامل:** Ubuntu 22.04+
+- **رم:** حداقل ۴ گیگابایت
+- **پورت‌های باز:** 22 (SSH), 80 (HTTP), 443 (HTTPS), 9001 (MinIO Console)
+- **دامنه:** یک رکورد A که به IP سرور اشاره کند
+
+### خروجی اسکریپت
+پس از اجرا، ۷ سرویس در Docker بالا می‌آیند:
+
+| سرویس | پورت داخلی | توضیح |
+|---|---|---|
+| Nginx | 80, 443 | پروکسی معکوس + SSL |
+| Frontend (Next.js) | 3000 | وب‌اپلیکیشن PWA |
+| Backend (Go) | 8081 | API + منطق کسب‌وکار |
+| PostgreSQL 16 | 5432 | دیتابیس + PostGIS |
+| Redis | 6379 | کش و OTP |
+| NATS | 4222 | پیام‌رسان رویدادها |
+| MinIO | 9000 | ذخیره‌سازی فایل |
+
+### مدیریت سرور
+
+```bash
+cd /opt/sabtbrooker
+docker compose ps                  # وضعیت سرویس‌ها
+docker compose logs -f backend     # لاگ بک‌اِند
+docker compose restart             # راه‌اندازی مجدد
+docker compose down && docker compose up -d  # ری‌استارت کامل
 ```
 
 ---
-**Project Delivery Phase** — تمامی بخش‌ها برای استقرار روی VPS آماده است.
+**Project Delivery Phase** — آماده استقرار Production 🚀
 
 
 

@@ -1,32 +1,31 @@
 services:
   # ====================================================================
-  # PostgreSQL 16 + PostGIS
+  # ۱. PostgreSQL 16 + PostGIS
   # ====================================================================
   postgres:
     image: postgis/postgis:16-3.4
     container_name: sabtbrooker-db
     environment:
-      POSTGRES_USER: sabtbrooker
-      POSTGRES_PASSWORD: sabtbrooker
-      POSTGRES_DB: sabtbrooker
-    ports:
-      - "5433:5432"  # host 5433 → container 5432 (avoid conflict with local Postgres)
+      POSTGRES_USER: ${DB_USER:-sabtbrooker}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sabtbrooker}
+      POSTGRES_DB: ${DB_NAME:-sabtbrooker}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sabtbrooker"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sabtbrooker}"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
 
   # ====================================================================
-  # Redis
+  # ۲. Redis
   # ====================================================================
   redis:
     image: redis:7-alpine
     container_name: sabtbrooker-redis
-    ports:
-      - "6379:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -35,30 +34,30 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
 
   # ====================================================================
-  # NATS JetStream
+  # ۳. NATS JetStream
   # ====================================================================
   nats:
     image: nats:2.10-alpine
     container_name: sabtbrooker-nats
-    ports:
-      - "4222:4222"   # client
-      - "8222:8222"   # monitoring
-    command: -js -m 8222
+    command: -js
+    restart: unless-stopped
+    networks:
+      - internal
 
   # ====================================================================
-  # MinIO (S3-compatible object storage)
+  # ۴. MinIO (Object Storage)
   # ====================================================================
   minio:
     image: minio/minio:latest
     container_name: sabtbrooker-minio
-    ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -67,39 +66,87 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
 
   # ====================================================================
-  # Backend API (Go)
+  # ۵. Backend API (Go)
   # ====================================================================
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: sabtbrooker-backend
-    ports:
-      - "8081:8081"
     environment:
       SERVER_HOST: "0.0.0.0"
       SERVER_PORT: "8081"
       DB_HOST: postgres
       DB_PORT: "5432"
-      DB_USER: sabtbrooker
-      DB_PASSWORD: sabtbrooker
-      DB_NAME: sabtbrooker
+      DB_USER: ${DB_USER:-sabtbrooker}
+      DB_PASSWORD: ${DB_PASSWORD:-sabtbrooker}
+      DB_NAME: ${DB_NAME:-sabtbrooker}
       DB_SSLMODE: disable
       REDIS_ADDR: redis:6379
       NATS_URL: nats://nats:4222
       MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: minioadmin
-      MINIO_SECRET_KEY: minioadmin
-      MINIO_BUCKET: sabtbrooker
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-sabtbrooker}
       MINIO_USE_SSL: "false"
+      SMS_PROVIDER: ${SMS_PROVIDER:-}
+      SMS_API_KEY: ${SMS_API_KEY:-}
+      SMS_SENDER_NUMBER: ${SMS_SENDER_NUMBER:-}
+      PSP_MERCHANT_ID: ${PSP_MERCHANT_ID:-}
+      SECURITY_ENCRYPTION_KEY: ${SECURITY_ENCRYPTION_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - internal
+
+  # ====================================================================
+  # ۶. Frontend (Next.js PWA)
+  # ====================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: sabtbrooker-frontend
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://API_DOMAIN/api}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - internal
+
+  # ====================================================================
+  # ۷. Nginx (Reverse Proxy + SSL)
+  # ====================================================================
+  nginx:
+    image: nginx:1.26-alpine
+    container_name: sabtbrooker-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
 
 volumes:
   postgres_data:

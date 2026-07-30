@@ -22,7 +22,8 @@ ENV TZ=Asia/Tehran
 WORKDIR /app
 
 COPY --from=builder /app/server .
-# Migrations run separately via golang-migrate / Flyway — not baked into image
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Create non-root user
 RUN adduser -D -g '' appuser
@@ -31,9 +32,9 @@ RUN adduser -D -g '' appuser
 RUN mkdir -p /app/keys && chown appuser:appuser /app/keys
 USER appuser
 
-EXPOSE 8080
+EXPOSE 8081
 
 HEALTHCHECK --interval=15s --timeout=3s --retries=3 \
-  CMD wget -q --spider http://localhost:8080/health || exit 1
+  CMD wget -q --spider http://localhost:8081/health || exit 1
 
-ENTRYPOINT ["./server"]
+ENTRYPOINT ["/entrypoint.sh"]
