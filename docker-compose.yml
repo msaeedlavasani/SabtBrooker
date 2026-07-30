@@ -77,6 +77,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.io,direct}
     container_name: sabtbrooker-backend
     environment:
       SERVER_HOST: "0.0.0.0"

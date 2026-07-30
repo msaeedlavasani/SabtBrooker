@@ -1,6 +1,9 @@
 # Build stage
 FROM golang:1.25-alpine AS builder
 
+ARG GOPROXY=https://goproxy.io,direct
+ENV GOPROXY=${GOPROXY}
+
 RUN apk add --no-cache git ca-certificates
 
 WORKDIR /app
