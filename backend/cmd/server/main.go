@@ -109,7 +109,17 @@ func main() {
 
 	// ── Services ────────────────────────────────────────────────
 
-	notifySvc := notification.NewService(db.Pool, rdb, nil)
+	var smsProvider notification.SMSProvider
+	switch cfg.SMS.Provider {
+	case "melipayamak":
+		smsProvider = notification.NewMeliPayamakProvider(cfg.SMS.Username, cfg.SMS.Password)
+	case "kavenegar":
+		smsProvider = notification.NewKavenegarProvider(cfg.SMS.APIKey)
+	default:
+		smsProvider = &notification.ConsoleSMSProvider{}
+	}
+
+	notifySvc := notification.NewService(db.Pool, rdb, smsProvider)
 	
 	// Payment Provider (Stub for now)
 	paymentProvider := payment.NewZarinpalProvider("MOCK_MERCHANT_ID", true)

@@ -81,6 +81,56 @@ func (p *KavenegarProvider) SendPattern(ctx context.Context, mobile, pattern str
 	return nil
 }
 
+// MeliPayamakProvider implements SMSProvider for MeliPayamak service
+type MeliPayamakProvider struct {
+	username string
+	password string
+	client   *http.Client
+}
+
+func NewMeliPayamakProvider(username, password string) *MeliPayamakProvider {
+	return &MeliPayamakProvider{
+		username: username,
+		password: password,
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+}
+
+func (p *MeliPayamakProvider) Send(ctx context.Context, mobile, content string) error {
+	endpoint := "https://rest.payamak-panel.com/api/SendSMS/SendSimpleSMS"
+	form := url.Values{}
+	form.Add("username", p.username)
+	form.Add("password", p.password)
+	form.Add("to", mobile)
+	form.Add("from", "5000...") // Default number or config
+	form.Add("text", content)
+
+	resp, err := p.client.PostForm(endpoint, form)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
+func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern string, tokens map[string]string) error {
+	// MeliPayamak SendOTP (Shared Line)
+	endpoint := "https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber"
+	form := url.Values{}
+	form.Add("username", p.username)
+	form.Add("password", p.password)
+	form.Add("text", tokens["token"]) // MeliPayamak expects the code as the first token
+	form.Add("to", mobile)
+	form.Add("bodyId", pattern)
+
+	resp, err := p.client.PostForm(endpoint, form)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
+}
+
 // Service handles all notification channels
 type Service struct {
 	db          *pgxpool.Pool

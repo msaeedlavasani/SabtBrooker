@@ -15,6 +15,16 @@ type Config struct {
 	OTP      OTPConfig
 	Security SecurityConfig
 	MinIO    MinIOConfig
+	SMS      SMSConfig
+}
+
+type SMSConfig struct {
+	Provider     string
+	APIKey       string
+	Username     string
+	Password     string
+	SenderNumber string
+	OTPPaternID  string
 }
 
 type ServerConfig struct {
@@ -141,6 +151,14 @@ func Load() (*Config, error) {
 			SecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
 			Bucket:    getEnv("MINIO_BUCKET", "sabtbrooker"),
 			UseSSL:    getBool("MINIO_USE_SSL", false),
+		},
+		SMS: SMSConfig{
+			Provider:     getEnv("SMS_PROVIDER", "console"),
+			APIKey:       getEnv("SMS_API_KEY", ""),
+			Username:     getEnv("SMS_USERNAME", ""),
+			Password:     getEnv("SMS_PASSWORD", ""),
+			SenderNumber: getEnv("SMS_SENDER_NUMBER", ""),
+			OTPPaternID:  getEnv("SMS_OTP_PATTERN_ID", ""),
 		},
 	}, nil
 }
