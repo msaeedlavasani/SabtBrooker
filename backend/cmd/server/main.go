@@ -119,7 +119,7 @@ func main() {
 		smsProvider = &notification.ConsoleSMSProvider{}
 	}
 
-	notifySvc := notification.NewService(db.Pool, rdb, smsProvider)
+	notifySvc := notification.NewService(db.Pool, rdb, smsProvider, cfg.SMS.OTPPaternID)
 	
 	// Payment Provider (Stub for now)
 	paymentProvider := payment.NewZarinpalProvider("MOCK_MERCHANT_ID", true)

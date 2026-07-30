@@ -133,17 +133,18 @@ func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern s
 
 // Service handles all notification channels
 type Service struct {
-	db          *pgxpool.Pool
-	redisCli    *redis.Client
-	smsProvider SMSProvider
+	db           *pgxpool.Pool
+	redisCli     *redis.Client
+	smsProvider  SMSProvider
+	otpPatternID string
 }
 
 // NewService creates a notification service
-func NewService(db *pgxpool.Pool, redisCli *redis.Client, sms SMSProvider) *Service {
+func NewService(db *pgxpool.Pool, redisCli *redis.Client, sms SMSProvider, otpPatternID string) *Service {
 	if sms == nil {
 		sms = &ConsoleSMSProvider{}
 	}
-	return &Service{db: db, redisCli: redisCli, smsProvider: sms}
+	return &Service{db: db, redisCli: redisCli, smsProvider: sms, otpPatternID: otpPatternID}
 }
 
 // SendInApp creates an in-app notification in the database
@@ -189,7 +190,11 @@ func (s *Service) SendSMS(ctx context.Context, userID uuid.UUID, mobile, content
 
 // SendOTP sends an OTP via pattern lookup (fast & reliable)
 func (s *Service) SendOTP(ctx context.Context, mobile, code string) error {
-	return s.smsProvider.SendPattern(ctx, mobile, "otp-template", map[string]string{"token": code})
+	pattern := s.otpPatternID
+	if pattern == "" {
+		pattern = "otp-template" // Fallback
+	}
+	return s.smsProvider.SendPattern(ctx, mobile, pattern, map[string]string{"token": code})
 }
 
 // SendEmail sends an email — stub for now
