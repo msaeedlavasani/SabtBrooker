@@ -112,7 +112,7 @@ func main() {
 	var smsProvider notification.SMSProvider
 	switch cfg.SMS.Provider {
 	case "melipayamak":
-		smsProvider = notification.NewMeliPayamakProvider(cfg.SMS.Username, cfg.SMS.Password)
+		smsProvider = notification.NewMeliPayamakProvider(cfg.SMS.Username, cfg.SMS.Password, cfg.SMS.SenderNumber)
 	case "kavenegar":
 		smsProvider = notification.NewKavenegarProvider(cfg.SMS.APIKey)
 	default:

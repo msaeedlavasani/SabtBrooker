@@ -83,16 +83,18 @@ func (p *KavenegarProvider) SendPattern(ctx context.Context, mobile, pattern str
 
 // MeliPayamakProvider implements SMSProvider for MeliPayamak service
 type MeliPayamakProvider struct {
-	username string
-	password string
-	client   *http.Client
+	username     string
+	password     string
+	senderNumber string
+	client       *http.Client
 }
 
-func NewMeliPayamakProvider(username, password string) *MeliPayamakProvider {
+func NewMeliPayamakProvider(username, password, senderNumber string) *MeliPayamakProvider {
 	return &MeliPayamakProvider{
-		username: username,
-		password: password,
-		client:   &http.Client{Timeout: 10 * time.Second},
+		username:     username,
+		password:     password,
+		senderNumber: senderNumber,
+		client:       &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -102,7 +104,7 @@ func (p *MeliPayamakProvider) Send(ctx context.Context, mobile, content string) 
 	form.Add("username", p.username)
 	form.Add("password", p.password)
 	form.Add("to", mobile)
-	form.Add("from", "5000...") // Default number or config
+	form.Add("from", p.senderNumber)
 	form.Add("text", content)
 
 	resp, err := p.client.PostForm(endpoint, form)
@@ -114,28 +116,28 @@ func (p *MeliPayamakProvider) Send(ctx context.Context, mobile, content string) 
 }
 
 func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern string, tokens map[string]string) error {
-	// MeliPayamak SendOTP (Shared Line)
-	endpoint := "https://rest.payamak-panel.com/api/SendSMS/BaseServiceNumber"
+	// MeliPayamak SendOtp Method (as per latest docs)
+	endpoint := "https://rest.payamak-panel.com/api/SendSMS/SendOtp"
 	form := url.Values{}
 	form.Add("username", p.username)
 	form.Add("password", p.password)
-	form.Add("text", tokens["token"])
 	form.Add("to", mobile)
-	form.Add("bodyId", pattern)
+	form.Add("from", p.senderNumber)
+	form.Add("code", tokens["token"]) // OTP code passed as 'code'
 
 	resp, err := p.client.PostForm(endpoint, form)
 	if err != nil {
-		slog.Error("melipayamak network error", "error", err)
+		slog.Error("melipayamak SendOtp network error", "error", err)
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("melipayamak api error", "status", resp.StatusCode)
-		return fmt.Errorf("melipayamak error status: %d", resp.StatusCode)
+		slog.Error("melipayamak SendOtp api error", "status", resp.StatusCode)
+		return fmt.Errorf("melipayamak SendOtp error status: %d", resp.StatusCode)
 	}
 	
-	slog.Info("melipayamak request sent", "mobile", mobile, "pattern", pattern)
+	slog.Info("melipayamak SendOtp request successful", "mobile", mobile)
 	return nil
 }
 
