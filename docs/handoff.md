@@ -36,19 +36,18 @@
 
 ---
 
-## ۳. باگ‌های باز (Open Issues)
-- **OTP Failure**: با وجود پایداری سرویس‌ها، درخواست `/auth/otp/send` با خطای نامشخص در رابط کاربری مواجه می‌شود. 
-    - **وضعیت**: در حال بررسی (Under Investigation).
-    - **فرضیه**: تداخل در تنظیمات `DEV_MODE` یا عدم اتصال صحیح به دیتابیس Redis در زمان ثبت کد.
+## ۳. اصلاحات موقت و تست
+- **Fixed OTP (Demo Mode)**: با توجه به عدم وجود پنل SMS در فاز فعلی، مکانیزم تولید کد تایید در حالت `DEV_MODE=true` بر روی مقدار ثابت **`1234`** تثبیت شد. 
+- **Network Resiliency**: اسکریپت استقرار با قابلیت تنظیم خودکار DNS (شکن) و GOPROXY به‌روزرسانی شد تا در سرورهای با محدودیت شبکه ایران بدون مشکل بیلد شود.
 
 ---
 
 ## ۴. راهنمای نگهداری
-برای بروزرسانی کدها روی سرور:
+برای بروزرسانی کدها و بیلد مجدد روی سرور:
 ```bash
 cd /opt/sabtbrooker
 git pull origin main
-docker compose build
+docker compose build --build-arg GOPROXY=https://goproxy.io,direct backend
 docker compose up -d
 ```
 

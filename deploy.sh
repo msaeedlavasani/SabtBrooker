@@ -22,6 +22,13 @@ DOMAIN="${1:-localhost}"
 
 log_step "1/6 — بررسی پیش‌نیازها"
 
+# تنظیم DNS شکن برای عبور از تحریم‌ها در زمان نصب (اختیاری اما توصیه شده برای ایران)
+if [ -f /etc/resolv.conf ]; then
+    log_info "تنظیم موقت DNS ضد تحریم..."
+    sed -i '1i nameserver 178.22.122.100' /etc/resolv.conf
+    sed -i '2i nameserver 185.51.200.2' /etc/resolv.conf
+fi
+
 # ── ۱.۱ Docker ───────────────────────────────────────────
 if ! command -v docker &>/dev/null; then
     log_warn "Docker نصب نیست. در حال نصب..."
@@ -79,10 +86,19 @@ if [ ! -f ".env.production" ]; then
     sed -i "s/REPLACE_WITH_STRONG_SECRET_KEY/$MINIO_SECRET/" .env.production
     sed -i "s/REPLACE_WITH_RANDOM_HEX_64_CHARS/$ENC_KEY/" .env.production
     sed -i "s|NEXT_PUBLIC_API_URL=.*|NEXT_PUBLIC_API_URL=https://$DOMAIN/api|" .env.production
+    
+    # اطمینان از فعال بودن حالت توسعه برای OTP ثابت 1234
+    if grep -q "DEV_MODE" .env.production; then
+        sed -i "s/DEV_MODE=.*/DEV_MODE=true/" .env.production
+    else
+        echo "DEV_MODE=true" >> .env.production
+    fi
 
-    log_info "فایل .env.production با مقادیر امنیتی تصادفی ساخته شد."
+    log_info "فایل .env.production با مقادیر امنیتی تصادفی و DEV_MODE=true ساخته شد."
 else
-    log_info "فایل .env.production از قبل وجود دارد."
+    # بروزرسانی DEV_MODE در فایل موجود
+    sed -i "s/DEV_MODE=.*/DEV_MODE=true/" .env.production
+    log_info "فایل .env.production بروزرسانی شد (DEV_MODE=true)."
 fi
 
 log_step "4/6 — تنظیم SSL (گواهی موقت)"
@@ -101,7 +117,11 @@ fi
 
 log_step "5/6 — ساخت و راه‌اندازی سرویس‌ها"
 
-docker compose --env-file .env.production build
+# توقف سرویس‌های احتمالی قدیمی برای نصب تمیز
+docker compose down --remove-orphans || true
+
+# ساخت با اجبار به استفاده از GOPROXY برای ایران
+docker compose --env-file .env.production build --build-arg GOPROXY=https://goproxy.io,direct backend
 docker compose --env-file .env.production up -d
 
 log_step "6/6 — بررسی سلامت"

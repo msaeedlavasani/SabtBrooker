@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"os"
 	"time"
 
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/config"
@@ -33,10 +34,15 @@ func (s *OTPService) GenerateAndSend(ctx context.Context, mobile, purpose string
 		return "", time.Time{}, err
 	}
 
-	// Generate random OTP
+	// Generate random OTP (or use fixed code in dev mode)
 	otp, err := generateOTP(s.cfg.Length)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("failed to generate OTP: %w", err)
+	}
+
+	// Override for temporary manual testing
+	if os.Getenv("DEV_MODE") == "true" {
+		otp = "1234"
 	}
 
 	expiresAt := time.Now().Add(s.cfg.TTL)
