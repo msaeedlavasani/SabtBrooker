@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -49,11 +50,17 @@ func (h *AuthHandler) SendOTP(c echo.Context) error {
 		return c.JSON(http.StatusTooManyRequests, map[string]string{"error": err.Error()})
 	}
 
-	return c.JSON(http.StatusOK, map[string]interface{}{
+	resp := map[string]interface{}{
 		"message":    "کد تایید ارسال شد",
 		"expires_in": int(time.Until(expiresAt).Seconds()),
-		"dev_otp":    code, // فقط در محیط توسعه — در production حذف شود
-	})
+	}
+
+	// در حالت توسعه، کد OTP در پاسخ برگردانده می‌شود
+	if os.Getenv("DEV_MODE") == "true" {
+		resp["dev_otp"] = code
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }
 
 // VerifyOTP validates OTP and returns JWT tokens

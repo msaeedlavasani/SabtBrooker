@@ -99,6 +99,7 @@ services:
       SMS_SENDER_NUMBER: ${SMS_SENDER_NUMBER:-}
       PSP_MERCHANT_ID: ${PSP_MERCHANT_ID:-}
       SECURITY_ENCRYPTION_KEY: ${SECURITY_ENCRYPTION_KEY:-}
+      DEV_MODE: ${DEV_MODE:-true}
     depends_on:
       postgres:
         condition: service_healthy
