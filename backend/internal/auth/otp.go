@@ -29,10 +29,10 @@ func NewOTPService(rdb *redis.Client, cfg config.OTPConfig, notify *notification
 
 // GenerateAndSend creates an OTP, stores it in Redis, and sends via SMS
 func (s *OTPService) GenerateAndSend(ctx context.Context, mobile, purpose string) (string, time.Time, error) {
-	// Rate limiting check
-	if err := s.checkRateLimit(ctx, mobile); err != nil {
-		return "", time.Time{}, err
-	}
+	// Rate limiting check - Disabled temporarily for demo testing
+	// if err := s.checkRateLimit(ctx, mobile); err != nil {
+	// 	return "", time.Time{}, err
+	// }
 
 	// Generate random OTP (or use fixed code in dev mode)
 	otp, err := generateOTP(s.cfg.Length)

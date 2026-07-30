@@ -119,15 +119,23 @@ func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern s
 	form := url.Values{}
 	form.Add("username", p.username)
 	form.Add("password", p.password)
-	form.Add("text", tokens["token"]) // MeliPayamak expects the code as the first token
+	form.Add("text", tokens["token"])
 	form.Add("to", mobile)
 	form.Add("bodyId", pattern)
 
 	resp, err := p.client.PostForm(endpoint, form)
 	if err != nil {
+		slog.Error("melipayamak network error", "error", err)
 		return err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.Error("melipayamak api error", "status", resp.StatusCode)
+		return fmt.Errorf("melipayamak error status: %d", resp.StatusCode)
+	}
+	
+	slog.Info("melipayamak request sent", "mobile", mobile, "pattern", pattern)
 	return nil
 }
 
