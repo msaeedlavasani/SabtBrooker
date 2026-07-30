@@ -123,7 +123,7 @@ func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern s
 	form.Add("password", p.password)
 	form.Add("to", mobile)
 	form.Add("from", p.senderNumber)
-	form.Add("code", tokens["token"]) // OTP code passed as 'code'
+	form.Add("code", tokens["token"])
 
 	resp, err := p.client.PostForm(endpoint, form)
 	if err != nil {
@@ -132,12 +132,15 @@ func (p *MeliPayamakProvider) SendPattern(ctx context.Context, mobile, pattern s
 	}
 	defer resp.Body.Close()
 
+	// Read full response for debugging
+	body, _ := io.ReadAll(resp.Body)
+	slog.Info("melipayamak response raw", "status", resp.StatusCode, "body", string(body))
+
 	if resp.StatusCode != http.StatusOK {
-		slog.Error("melipayamak SendOtp api error", "status", resp.StatusCode)
-		return fmt.Errorf("melipayamak SendOtp error status: %d", resp.StatusCode)
+		return fmt.Errorf("melipayamak SendOtp error status: %d, body: %s", resp.StatusCode, string(body))
 	}
 	
-	slog.Info("melipayamak SendOtp request successful", "mobile", mobile)
+	slog.Info("melipayamak SendOtp request handled", "mobile", mobile)
 	return nil
 }
 

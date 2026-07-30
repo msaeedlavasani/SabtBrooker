@@ -80,28 +80,13 @@ services:
       args:
         GOPROXY: ${GOPROXY:-https://goproxy.io,direct}
     container_name: sabtbrooker-backend
+    env_file:
+      - .env.production
     environment:
       SERVER_HOST: "0.0.0.0"
       SERVER_PORT: "8081"
       DB_HOST: postgres
       DB_PORT: "5432"
-      DB_USER: ${DB_USER:-sabtbrooker}
-      DB_PASSWORD: ${DB_PASSWORD:-sabtbrooker}
-      DB_NAME: ${DB_NAME:-sabtbrooker}
-      DB_SSLMODE: disable
-      REDIS_ADDR: redis:6379
-      NATS_URL: nats://nats:4222
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
-      MINIO_BUCKET: ${MINIO_BUCKET:-sabtbrooker}
-      MINIO_USE_SSL: "false"
-      SMS_PROVIDER: ${SMS_PROVIDER:-}
-      SMS_API_KEY: ${SMS_API_KEY:-}
-      SMS_SENDER_NUMBER: ${SMS_SENDER_NUMBER:-}
-      PSP_MERCHANT_ID: ${PSP_MERCHANT_ID:-}
-      SECURITY_ENCRYPTION_KEY: ${SECURITY_ENCRYPTION_KEY:-}
-      DEV_MODE: ${DEV_MODE:-true}
     depends_on:
       postgres:
         condition: service_healthy
