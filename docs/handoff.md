@@ -1,45 +1,53 @@
 # SabtBrooker — سند تحویل پروژه (Handoff)
 
-> آخرین به‌روزرسانی: ۲۰۲۶-۰۸-۰۲ (ایجاد زیرساخت استقرار Docker و اسکریپت deploy.sh)  
-> فاز فعلی: Phase 9 — آماده استقرار Production  
-> پیشرفت کلی: ۱۰۰٪ (Ready for Deploy)
+> آخرین به‌روزرسانی: ۲۰۲۶-۰۷-۳۰ (استقرار نهایی روی VPS و تثبیت پلتفرم)  
+> فاز فعلی: Phase 10 — بهره‌برداری زنده (Live)  
+> پیشرفت کلی: ۱۰۰٪ (Deploy Successful)
 
 ---
 
-## ۱. خلاصه اقدامات انجام شده
+## ۱. گزارش استقرار (Production Deployment)
 
-در این مرحله، تمام زیرساخت‌های لازم برای استقرار روی VPS تکمیل شد:
+سامانه هم‌اکنون روی سرور لایو با مشخصات زیر عملیاتی است:
 
-### ✅ زیرساخت Docker (Deployment Ready)
-- **Dockerfile فرانت‌اِند**: ساخته شد (multi-stage build برای Next.js).
-- **Dockerfile بک‌اِند**: اصلاح شد (هماهنگ‌سازی پورت‌ها + تولید خودکار کلید JWT).
-- **Nginx Reverse Proxy**: فایل `nginx/nginx.conf` با Rate Limiting و Security Headers.
-- **docker-compose.yml**: تکمیل شده با ۷ سرویس کامل.
-- **entrypoint.sh**: اسکریپت خودکار تولید کلیدهای RSA برای JWT.
+### ✅ اطلاعات سرور
+- **آدرس دامنه**: `https://sabt.saeedlavasani.ir`
+- **پنل مدیریت فایل**: `http://sabt.saeedlavasani.ir:9001`
+- **مسیر پروژه**: `/opt/sabtbrooker`
+- **زیرساخت**: Docker Compose (۷ کانتینر ایزوله)
 
-### ✅ اسکریپت استقرار یک‌خطی
-- **deploy.sh**: نصب Docker، clone کد، ساخت SSL، بالا آوردن همه سرویس‌ها.
-- **.env.production.example**: قالب فایل تنظیمات Production با توضیحات فارسی.
+### ✅ اقدامات انجام شده در این مرحله
+- **Deploy Automation**: ایجاد اسکریپت `deploy.sh` برای نصب خودکار پیش‌نیازها و بالا آوردن سرویس‌ها.
+- **SSL Installation**: فعال‌سازی HTTPS با گواهی خودامضا (آماده برای Let's Encrypt).
+- **Backend Hardening**: رفع باگ‌های کامپایل و افزودن `openssl` به کانتینر برای تولید خودکار کلیدهای RSA.
+- **Frontend Optimization**: فعال‌سازی حالت `standalone` در Next.js برای بیلد کم‌حجم و سریع Production.
+- **Network Fixes**: تنظیم `GOPROXY` اختصاصی جهت دور زدن تحریم‌های گوگل در زمان بیلد روی سرور ایران.
 
 ---
 
-## ۲. دستور استقرار یک‌خطی (One-liner)
+## ۲. وضعیت نهایی سرویس‌ها
+۱. **Nginx**: فعال (پروکسی معکوس + SSL) ✅
+۲. **Backend**: فعال (Go API + Workflows) ✅
+۳. **Frontend**: فعال (Next.js PWA) ✅
+۴. **PostgreSQL**: فعال (دیتابیس + PostGIS) ✅
+۵. **Redis**: فعال (OTP + Cache) ✅
+۶. **MinIO**: فعال (S3 Storage) ✅
+۷. **NATS**: فعال (JetStream Events) ✅
+
+---
+
+## ۳. راهنمای نگهداری
+برای بروزرسانی کدها روی سرور:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/msaeedlavasani/SabtBrooker/main/deploy.sh | bash -s -- YOUR_DOMAIN.com
+cd /opt/sabtbrooker
+git pull origin main
+docker compose build
+docker compose up -d
 ```
 
----
+برای مشاهده لاگ خطاها:
+```bash
+docker compose logs --tail=100 -f backend
+```
 
-## ۳. وضعیت نهایی
-کلیه بخش‌های پروژه برای استقرار روی سرور Production آماده است. تنها پیش‌نیاز: تهیه VPS و دامنه.
-
-### فایل‌های کلیدی استقرار
-| فایل | کاربرد |
-|---|---|
-| `deploy.sh` | اسکریپت اصلی استقرار |
-| `docker-compose.yml` | تعریف ۷ سرویس Docker |
-| `.env.production.example` | قالب تنظیمات Production |
-| `nginx/nginx.conf` | تنظیمات پروکسی معکوس |
-| `backend/entrypoint.sh` | تولید خودکار کلید JWT |
-| `backend/Dockerfile` | بیلد ایمیج Go |
-| `frontend/Dockerfile` | بیلد ایمیج Next.js |
+**پایان مأموریت توسعه و استقرار.** 🚀

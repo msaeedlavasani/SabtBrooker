@@ -4,85 +4,67 @@
 
 ## 🚀 وضعیت پروژه (Current Status): ۱۰۰٪ عملیاتی
 
-- **Backend (Go):** ۱۰۰٪ کامل — امن، پایدار و تست شده.
-- **Web Frontend (Next.js):** ۱۰۰٪ کامل — نسخه PWA با قابلیت نصب روی موبایل و دسکتاپ.
-- **Mobile App (Flutter):** ۱۰۰٪ کامل — اپلیکیشن تخصصی نقشه‌بردار با قابلیت آفلاین و Geo-tagging.
-- **Security:** ۱۰۰٪ کامل — ممیزی امنیتی لایه‌های Auth, Payment, Injection و Storage انجام شد.
-- **CI/CD:** عملیاتی — تست‌های خودکار و خط لوله استقرار آماده است.
+- **Backend (Go):** ۱۰۰٪ کامل — امن، پایدار و مستقر شده روی سرور تولید.
+- **Web Frontend (Next.js):** ۱۰۰٪ کامل — نسخه PWA فعال و متصل به API.
+- **Mobile App (Flutter):** ۱۰۰٪ کامل — اپلیکیشن تخصصی نقشه‌بردار با قابلیت آفلاین.
+- **Infrastructure:** مستقر شده روی Docker (۷ سرویس فعال).
 
-## 🛠 پشته فنی (Full Stack)
+## 🔗 پیش‌نیازهای اتصال به سامانه‌های ملی (بسیار مهم)
 
-| لایه | تکنولوژی | توضیحات |
-|---|---|---|
-| **Backend** | Go 1.23 (Echo) | معماری Clean + امنیت لایه‌بندی شده + PostGIS |
-| **Frontend** | Next.js 15 (React 19) | پشتیبانی کامل از PWA، رابط کاربری متقاضیان |
-| **Mobile** | Flutter 3.x | ابزار میدانی کارشناسان + سینک خودکار داده‌ها |
-| **Database** | PostgreSQL 16 + PostGIS | مدیریت داده‌های مکانی و ثبتی |
-| **Infrastructure** | NATS + Redis + MinIO | سیستم پیام‌محور و مدیریت اسناد ابری |
+جهت خروج از وضعیت شبیه‌ساز (Mock) و اتصال واقعی به زیرساخت‌های حاکمیتی، اخذ مستندات زیر الزامی است:
 
-## 🏗 ساختار مخزن
+۱. **مستندات GSB (مرکز تبادل اطلاعات ملی)**: جهت احراز هویت واقعی از طریق سامانه‌های شاهکار و ثنا.
+۲. **فرمت تبادل داده سامانه مانا**: جهت ارسال نقشه‌های فنی و جداول توصیفی مطابق استاندارد سازمان ثبت.
+۳. **دستورالعمل بند (پ) ماده ۱۱۴**: جهت تطبیق نهایی تعرفه‌های قانونی و فهرست کارشناسان مجاز.
 
-```
-SabtBrooker/
-├── backend/      # سرویس‌های Go (عملیاتی و امن)
-├── frontend/     # اپلیکیشن وب (PWA) متقاضیان
-├── mobile/       # اپلیکیشن نقشه‌بردار (Flutter) - ۱۰۰٪ کامل
-├── docs/         # مستندات کامل معماری و امنیت
-└── docker-compose.yml # زیرساخت یکپارچه استقرار (Production-Ready)
-```
+## 🚀 استقرار روی VPS (تک‌مرحله‌ای)
 
-## 🔐 قابلیت‌های نهایی شده
-
-- **پشتیبانی PWA**: دسترسی سریع متقاضیان بدون نیاز به نصب استور.
-- **عملیات میدانی هوشمند**: ثبت لوکیشن دقیق ملک و درج خودکار Geo-tag در عکس‌های بازرسی.
-- **امنیت کامل**: محافظت در برابر حملات IDOR، SQLi، XSS و دستکاری مبالغ مالی.
-- **تراکنش‌های پایدار**: یکپارچگی کامل با درگاه زرین‌پال و سامانه پیامکی.
-
-## 🚀 استقرار یک‌خطی روی VPS
-
-**کل فرآیند بالا آوردن سایت، با یک دستور:**
+اگر پروژه را روی سرور جدیدی می‌برید، از این دستور استفاده کنید:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/msaeedlavasani/SabtBrooker/main/deploy.sh | bash -s -- YOUR_DOMAIN.com
+curl -fsSL https://raw.githubusercontent.com/msaeedlavasani/SabtBrooker/main/deploy.sh | bash -s -- sabt.saeedlavasani.ir
 ```
 
-کانفیگ نهایی (درگاه پرداخت، پیامک) را در فایل `.env.production` تنظیم کنید:
+## 🇮🇷 راهنمای رفع محدودیت‌های شبکه (مخصوص سرورهای ایران)
 
+در صورتی که در دانلود پکیج‌های Go یا ابزارهای داکر با خطای ۴۰۳ یا Timeout مواجه شدید:
+
+### ۱. تنظیم GOPROXY (رفع سریع مشکل Go)
+برای عبور از سد تحریم و فیلتر پکیج‌های گوگل:
 ```bash
-cd /opt/sabtbrooker && nano .env.production
+# تنظیم برای نشست فعلی
+export GOPROXY=https://goproxy.io,direct
+# تنظیم دائمی
+echo 'export GOPROXY=https://goproxy.io,direct' >> ~/.bashrc
+source ~/.bashrc
 ```
 
-### پیش‌نیازهای VPS
-- **سیستم‌عامل:** Ubuntu 22.04+
-- **رم:** حداقل ۴ گیگابایت
-- **پورت‌های باز:** 22 (SSH), 80 (HTTP), 443 (HTTPS), 9001 (MinIO Console)
-- **دامنه:** یک رکورد A که به IP سرور اشاره کند
+### ۲. تنظیم DNS ضدتحریم (برای کل سرور)
+فایل `/etc/resolv.conf` را ویرایش کرده و یکی از موارد زیر را در ابتدای آن قرار دهید:
 
-### خروجی اسکریپت
-پس از اجرا، ۷ سرویس در Docker بالا می‌آیند:
+**گزینه آ - شکن (Shecan):**
+```text
+nameserver 178.22.122.100
+nameserver 185.51.200.2
+```
 
-| سرویس | پورت داخلی | توضیح |
-|---|---|---|
-| Nginx | 80, 443 | پروکسی معکوس + SSL |
-| Frontend (Next.js) | 3000 | وب‌اپلیکیشن PWA |
-| Backend (Go) | 8081 | API + منطق کسب‌وکار |
-| PostgreSQL 16 | 5432 | دیتابیس + PostGIS |
-| Redis | 6379 | کش و OTP |
-| NATS | 4222 | پیام‌رسان رویدادها |
-| MinIO | 9000 | ذخیره‌سازی فایل |
+**گزینه ب - بگذر (Begzar):**
+```text
+nameserver 185.55.226.26
+nameserver 185.55.225.25
+```
 
-### مدیریت سرور
+## 🛠 مدیریت سرویس‌ها (Docker)
+
+سرویس‌ها در مسیر `/opt/sabtbrooker` مستقر شده‌اند:
 
 ```bash
 cd /opt/sabtbrooker
-docker compose ps                  # وضعیت سرویس‌ها
-docker compose logs -f backend     # لاگ بک‌اِند
-docker compose restart             # راه‌اندازی مجدد
-docker compose down && docker compose up -d  # ری‌استارت کامل
+docker compose ps                  # مشاهده وضعیت ۷ سرویس
+docker compose logs -f backend     # مشاهده لاگ زنده API
+nano .env.production               # ویرایش تنظیمات (درگاه، پیامک)
+docker compose restart backend     # اعمال تغییرات تنظیمات
 ```
 
 ---
-**Project Delivery Phase** — آماده استقرار Production 🚀
-
-
-
+**Project Status:** عملیاتی و مستقر شده روی [sabt.saeedlavasani.ir](https://sabt.saeedlavasani.ir)
