@@ -1,79 +1,306 @@
-# SabtBrooker — سامانه کارگزاری هوشمند ماده ۱۰
+# SabtBrooker
 
-پلتفرم کارگزاری رسمی سازمان ثبت اسناد و املاک کشور جهت اجرای «قانون الزام به ثبت رسمی معاملات اموال غیرمنقول». این سامانه زنجیره کامل خدمات ثبتی از نقشه‌برداری تا صدور گواهی نهایی را به صورت هوشمند مدیریت می‌کند.
-
-## 🚀 وضعیت پروژه (Current Status): ۱۰۰٪ عملیاتی
-
-- **Backend (Go):** ۱۰۰٪ کامل — امن، پایدار و مستقر شده روی سرور تولید.
-- **Web Frontend (Next.js):** ۱۰۰٪ کامل — نسخه PWA فعال و متصل به API.
-- **Mobile App (Flutter):** ۱۰۰٪ کامل — اپلیکیشن تخصصی نقشه‌بردار با قابلیت آفلاین.
-- **Infrastructure:** مستقر شده روی Docker (۷ سرویس فعال).
-
-## 🔗 پیش‌نیازهای اتصال به سامانه‌های ملی (بسیار مهم)
-
-جهت خروج از وضعیت شبیه‌ساز (Mock) و اتصال واقعی به زیرساخت‌های حاکمیتی، اخذ مستندات زیر الزامی است:
-
-۱. **مستندات GSB (مرکز تبادل اطلاعات ملی)**: جهت احراز هویت واقعی از طریق سامانه‌های شاهکار و ثنا.
-۲. **فرمت تبادل داده سامانه مانا**: جهت ارسال نقشه‌های فنی و جداول توصیفی مطابق استاندارد سازمان ثبت.
-۳. **دستورالعمل بند (پ) ماده ۱۱۴**: جهت تطبیق نهایی تعرفه‌های قانونی و فهرست کارشناسان مجاز.
-
-## 🚀 استقرار روی VPS (تک‌مرحله‌ای)
-
-اگر پروژه را روی سرور جدیدی می‌برید، از این دستور استفاده کنید:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/msaeedlavasani/SabtBrooker/main/deploy.sh | bash -s -- sabt.saeedlavasani.ir
-```
-
-## 🇮🇷 راهنمای رفع محدودیت‌های شبکه (مخصوص سرورهای ایران)
-
-در صورتی که در دانلود پکیج‌های Go یا ابزارهای داکر با خطای ۴۰۳ یا Timeout مواجه شدید:
-
-### ۱. تنظیم GOPROXY (رفع سریع مشکل Go)
-برای عبور از سد تحریم و فیلتر پکیج‌های گوگل:
-```bash
-# تنظیم برای نشست فعلی
-export GOPROXY=https://goproxy.io,direct
-# تنظیم دائمی
-echo 'export GOPROXY=https://goproxy.io,direct' >> ~/.bashrc
-source ~/.bashrc
-```
-
-### ۲. تنظیم DNS ضدتحریم (برای کل سرور)
-فایل `/etc/resolv.conf` را ویرایش کرده و یکی از موارد زیر را در ابتدای آن قرار دهید:
-
-**گزینه آ - شکن (Shecan):**
-```text
-nameserver 178.22.122.100
-nameserver 185.51.200.2
-```
-
-**گزینه ب - بگذر (Begzar):**
-```text
-nameserver 185.55.226.26
-nameserver 185.55.225.25
-```
-
-## 🛠 مدیریت سرویس‌ها (Docker)
-
-سرویس‌ها در مسیر `/opt/sabtbrooker` مستقر شده‌اند:
-
-```bash
-cd /opt/sabtbrooker
-docker compose ps                  # مشاهده وضعیت ۷ سرویس
-docker compose logs -f backend     # مشاهده لاگ زنده API
-nano .env.production               # ویرایش تنظیمات (درگاه، پیامک)
-docker compose restart backend     # اعمال تغییرات تنظیمات
-```
-
-## 🔍 عیب‌یابی و وضعیت فعلی (تیر ۱۴۰۵)
-
-- **SSL/TLS**: گواهی رسمی **Let's Encrypt** فعال شد. سایت دارای قفل سبز است.
-- **CORS**: محدودیت‌های دامنه اصلاح شد.
-- **ارسال پیامک (MeliPayamak)**: زیرساخت اتصال به متد `SendOtp` ملی‌پیامک پیاده‌سازی شد.
-- **ورود مستقیم (OTP Bypass)**: جهت تضمین پایداری در جلسات دمو، مرحله OTP موقتاً از چرخه حذف شد. با هر شماره‌ای می‌توانید مستقیماً وارد پنل شوید.
-- **استقرار هوشمند**: اسکریپت نصب (`deploy.sh`) اکنون به صورت خودکار محدودیت‌های شبکه ایران (DNS و GOPROXY) را مدیریت می‌کند.
-- **امنیت خودکار**: سیستم در هنگام اولین اجرا، کلیدهای RSA مورد نیاز برای JWT را به صورت خودکار تولید می‌کند (رفع باگ وابستگی به OpenSSL).
+سامانه هوشمند مدیریت پرونده‌های ثبتی مبتنی بر معماری Microservice
 
 ---
-**Project Status:** عملیاتی و مستقر شده روی [sabt.saeedlavasani.ir](https://sabt.saeedlavasani.ir)
+
+## وضعیت پروژه
+
+**Status:** Production (Demo Ready)
+
+سامانه روی VPS مستقر شده و هم‌اکنون از طریق دامنه زیر در دسترس است:
+
+**Frontend**
+
+https://sabt.saeedlavasani.ir
+
+**API**
+
+https://sabt.saeedlavasani.ir/api
+
+---
+
+# ویژگی‌ها
+
+- معماری Microservice
+- Backend با Go
+- Frontend با Next.js
+- PostgreSQL + PostGIS
+- Redis
+- MinIO (S3 Storage)
+- NATS JetStream
+- JWT Authentication
+- Docker Compose
+- Reverse Proxy با Nginx
+- SSL (Let's Encrypt)
+- PWA Ready
+
+---
+
+# معماری سیستم
+
+```
+                Internet
+                     │
+                     ▼
+               Nginx (SSL)
+                     │
+         ┌───────────┴───────────┐
+         ▼                       ▼
+   Next.js Frontend        Go Backend API
+                                   │
+          ┌─────────────┬──────────────┬─────────────┐
+          ▼             ▼              ▼             ▼
+      PostgreSQL      Redis         MinIO         NATS
+```
+
+---
+
+# تکنولوژی‌ها
+
+## Backend
+
+- Go
+- Echo Framework
+- JWT
+- PostgreSQL
+- Redis
+- MinIO
+- NATS
+
+---
+
+## Frontend
+
+- Next.js
+- React
+- TypeScript
+- Axios
+- PWA
+
+---
+
+## Infrastructure
+
+- Docker
+- Docker Compose
+- Nginx
+- Let's Encrypt
+
+---
+
+# ساختار پروژه
+
+```
+backend/
+frontend/
+
+docker-compose.yml
+deploy.sh
+.env.production
+
+README.md
+HANDOFF.md
+```
+
+---
+
+# سرویس‌های Production
+
+| Service | Status |
+|----------|--------|
+| Frontend | ✅ |
+| Backend | ✅ |
+| PostgreSQL | ✅ |
+| Redis | ✅ |
+| MinIO | ✅ |
+| NATS | ✅ |
+| Nginx | ✅ |
+
+---
+
+# اجرای پروژه
+
+## Clone
+
+```bash
+git clone <repository-url>
+
+cd SabtBrooker
+```
+
+---
+
+## Build
+
+```bash
+docker compose build
+```
+
+---
+
+## Run
+
+```bash
+docker compose up -d
+```
+
+---
+
+## مشاهده وضعیت
+
+```bash
+docker compose ps
+```
+
+---
+
+# متغیرهای محیطی
+
+نمونه فایل:
+
+```
+.env.production
+```
+
+نمونه تنظیمات:
+
+```env
+NEXT_PUBLIC_API_URL=https://your-domain/api
+
+DB_HOST=postgres
+DB_PORT=5432
+DB_NAME=sabtbrooker
+DB_USER=sabtbrooker
+DB_PASSWORD=********
+
+REDIS_ADDR=redis:6379
+
+MINIO_ENDPOINT=minio:9000
+
+NATS_URL=nats://nats:4222
+```
+
+---
+
+# Deploy روی سرور
+
+```bash
+git pull
+
+docker compose down
+
+docker compose build --no-cache
+
+docker compose up -d
+```
+
+---
+
+# دستورات مفید
+
+مشاهده سرویس‌ها
+
+```bash
+docker compose ps
+```
+
+لاگ Backend
+
+```bash
+docker compose logs -f backend
+```
+
+لاگ Frontend
+
+```bash
+docker compose logs -f frontend
+```
+
+ورود به Backend
+
+```bash
+docker exec -it sabtbrooker-backend sh
+```
+
+ورود به Frontend
+
+```bash
+docker exec -it sabtbrooker-frontend sh
+```
+
+ورود به Database
+
+```bash
+docker exec -it sabtbrooker-db psql -U sabtbrooker -d sabtbrooker
+```
+
+---
+
+# احراز هویت
+
+نسخه فعلی جهت ارائه (Demo) آماده شده است.
+
+در این نسخه:
+
+- ارسال OTP همیشه موفق است.
+- کد 1234 معتبر در نظر گرفته می‌شود.
+- Backend بدون بررسی واقعی OTP توکن JWT صادر می‌کند.
+- در صورت نبود کاربر، به صورت خودکار ساخته می‌شود.
+
+> این رفتار فقط برای نسخه Demo فعال است و باید قبل از انتشار نهایی به حالت استاندارد بازگردد.
+
+---
+
+# نکته مهم درباره Next.js
+
+متغیر
+
+```
+NEXT_PUBLIC_API_URL
+```
+
+در زمان Build داخل فایل‌های `.next` کامپایل می‌شود.
+
+بک‌اِند نیز آدرس را در فایل `.env.production` می‌خواند. 
+
+---
+
+# وضعیت فعلی پروژه
+
+- ✅ Production Deployment
+- ✅ HTTPS فعال
+- ✅ Reverse Proxy
+- ✅ Dockerized
+- ✅ JWT Authentication
+- ✅ Redis Connected
+- ✅ PostgreSQL Connected
+- ✅ MinIO Connected
+- ✅ NATS Connected
+- ✅ PWA
+- ✅ Demo Login
+
+---
+
+# Roadmap
+
+نسخه‌های بعدی شامل موارد زیر خواهند بود:
+
+- پنل کارشناسان
+- پنل مدیر سیستم
+- مدیریت کاربران
+- احراز هویت واقعی با OTP
+- اتصال کامل به ملی پیامک
+- داشبورد مدیریتی
+- Notification Center
+- Audit Log
+- CI/CD Pipeline
+- Backup خودکار
+
+---
+
+# License
+
+Private Repository
+
+All Rights Reserved © Mohammad Saeed Lavasani

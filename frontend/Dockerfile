@@ -1,6 +1,10 @@
 # ── Build Stage ──────────────────────────────────────────
 FROM node:20-alpine AS builder
 
+# اضافه کردن آرگومان بیلد برای آدرس API (حیاتی برای Next.js)
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 WORKDIR /app
 
 # Cache dependencies

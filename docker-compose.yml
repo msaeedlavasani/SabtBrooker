@@ -103,10 +103,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://sabt.saeedlavasani.ir/api/v1}
     container_name: sabtbrooker-frontend
+    env_file:
+      - .env.production
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://API_DOMAIN/api}
     depends_on:
       - backend
     restart: unless-stopped
