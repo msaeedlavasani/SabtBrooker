@@ -2,8 +2,6 @@ package handler
 
 import (
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/msaeedlavasani/SabtBrooker/backend/internal/auth"
