@@ -19,13 +19,18 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/v1/auth/otp/send", { mobile });
-      if (res.data.dev_otp) {
-        setDevOtp(res.data.dev_otp);
+      // BYPASS SENDING OTP - Just trigger verification with fake code
+      const res = await api.post("/v1/auth/otp/verify", { mobile, otp: "1234" });
+      localStorage.setItem("access_token", res.data.access_token);
+      
+      const userRes = await api.get("/v1/auth/me");
+      if (userRes.data.role === "expert") {
+        router.push("/expert/dashboard");
+      } else {
+        router.push("/dashboard");
       }
-      setStep(2);
     } catch (err: any) {
-      setError(err.response?.data?.error || "خطا در ارسال کد تایید");
+      setError(err.response?.data?.error || "خطا در ورود به سامانه");
     } finally {
       setLoading(false);
     }
@@ -102,7 +107,7 @@ export default function LoginPage() {
               disabled={loading}
               className="flex w-full items-center justify-center rounded-lg bg-navy p-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? <Loader2 className="animate-spin" /> : "دریافت کد تایید"}
+              {loading ? <Loader2 className="animate-spin" /> : "ورود مستقیم به پنل"}
             </button>
           </form>
         ) : (
