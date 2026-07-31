@@ -7,11 +7,8 @@ import { Loader2, Phone, ShieldCheck } from "lucide-react";
 
 export default function LoginPage() {
   const [mobile, setMobile] = useState("");
-  const [otp, setOtp] = useState("");
-  const [step, setStep] = useState(1); // 1: Mobile, 2: OTP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [devOtp, setDevOtp] = useState("");
   const router = useRouter();
 
   const handleSendOtp = async (e: React.FormEvent) => {
@@ -36,28 +33,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    try {
-      const res = await api.post("/v1/auth/otp/verify", { mobile, otp });
-      localStorage.setItem("access_token", res.data.access_token);
-      
-      // Get user profile to determine role
-      const userRes = await api.get("/v1/auth/me");
-      if (userRes.data.role === "expert") {
-        router.push("/expert/dashboard");
-      } else {
-        router.push("/dashboard");
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error || "کد تایید نامعتبر است");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-paper p-4">
       <div className="w-full max-w-md space-y-8 rounded-2xl border border-line bg-white p-8 shadow-sm">
@@ -69,7 +44,7 @@ export default function LoginPage() {
             سامانه کارگزاری ماده ۱۰
           </h2>
           <p className="mt-2 text-sm text-ink-soft">
-            ورود به پنل کاربری با شماره همراه
+            ورود سریع به پنل کاربری (نسخه دمو)
           </p>
         </div>
 
@@ -79,77 +54,36 @@ export default function LoginPage() {
           </div>
         )}
 
-        {step === 1 ? (
-          <form className="mt-8 space-y-6" onSubmit={handleSendOtp}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-ink">
-                شماره تلفن همراه
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  placeholder="0912xxxxxxx"
-                  className="block w-full rounded-lg border border-line bg-gray-50 p-3 pl-10 text-center font-mono focus:border-navy focus:bg-white focus:outline-none"
-                  value={mobile}
-                  onChange={(e) => setMobile(e.target.value)}
-                />
-                <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-soft">
-                  <Phone size={18} />
-                </div>
-              </div>
-              <p className="text-[11px] text-ink-soft">
-                شماره باید به نام متقاضی در سامانه شاهکار ثبت شده باشد.
-              </p>
-            </div>
-
-            <button
-              disabled={loading}
-              className="flex w-full items-center justify-center rounded-lg bg-navy p-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : "ورود مستقیم به پنل"}
-            </button>
-          </form>
-        ) : (
-          <form className="mt-8 space-y-6" onSubmit={handleVerifyOtp}>
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-ink text-center block">
-                کد تایید ۵ رقمی را وارد کنید
-              </label>
+        <form className="mt-8 space-y-6" onSubmit={handleSendOtp}>
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-ink">
+              شماره تلفن همراه
+            </label>
+            <div className="relative">
               <input
                 type="text"
                 required
-                maxLength={5}
-                className="block w-full rounded-lg border border-line bg-gray-50 p-4 text-center text-2xl font-bold tracking-[1rem] focus:border-navy focus:bg-white focus:outline-none"
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                placeholder="0912xxxxxxx"
+                className="block w-full rounded-lg border border-line bg-gray-50 p-3 pl-10 text-center font-mono focus:border-navy focus:bg-white focus:outline-none"
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
               />
-              {devOtp && (
-                <div className="text-center">
-                  <span className="text-[11px] text-brass">
-                    محیط توسعه: کد تایید {devOtp} است
-                  </span>
-                </div>
-              )}
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3 text-ink-soft">
+                <Phone size={18} />
+              </div>
             </div>
+            <p className="text-[11px] text-ink-soft">
+              در این نسخه دمو، نیاز به تایید کد اس‌ام‌اس نیست.
+            </p>
+          </div>
 
-            <div className="flex flex-col gap-3">
-              <button
-                disabled={loading}
-                className="flex w-full items-center justify-center rounded-lg bg-navy p-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                {loading ? <Loader2 className="animate-spin" /> : "تایید و ورود"}
-              </button>
-              <button
-                type="button"
-                className="text-sm text-ink-soft hover:text-navy"
-                onClick={() => setStep(1)}
-              >
-                ویرایش شماره موبایل
-              </button>
-            </div>
-          </form>
-        )}
+          <button
+            disabled={loading}
+            className="flex w-full items-center justify-center rounded-lg bg-navy p-3 font-bold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {loading ? <Loader2 className="animate-spin" /> : "ورود مستقیم به پنل"}
+          </button>
+        </form>
       </div>
     </div>
   );
